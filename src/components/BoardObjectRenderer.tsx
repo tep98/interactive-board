@@ -7,13 +7,17 @@ type Props = {
     draggable: boolean
     listening: boolean
     onMove: (id: string, x: number, y: number) => void
+    isSelected: boolean;
+    onSelect: (id: string, shift: boolean) => void;
 }
 
 function BoardObjectRenderer({
     object,
     draggable,
     listening,
-    onMove
+    onMove,
+    isSelected,
+    onSelect
 }: Props) {
     if (object.type === "text") {
         return (
@@ -23,13 +27,20 @@ function BoardObjectRenderer({
                 width={object.width}
                 height={object.height}
                 fill={object.color}
-                stroke= "black"
+
+                stroke= {isSelected? "#4da3ff" : "black"}
+                strokeWidth={isSelected? 3 : 1}
 
                 draggable = {draggable}
                 listening = {listening}
 
                 onDragEnd={(e) => {
                     onMove(object.id, e.target.x(), e.target.y())
+                }}
+
+                onMouseDown={(e) => {
+                    const shift = e.evt.shiftKey;
+                    onSelect(object.id, shift);
                 }}
             />
         )

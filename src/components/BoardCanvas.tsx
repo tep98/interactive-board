@@ -19,6 +19,9 @@ type Props = {
     setIsPointerInside: (value: boolean) => void;
 
     pointerRef: React.MutableRefObject<{x:number, y:number} | null>;
+
+    selectedIds: string[];
+    setSelectedIds: (ids: string[]) => void;
 };
 
 export default function BoardCanvas({
@@ -32,6 +35,8 @@ export default function BoardCanvas({
     isPointerInside,
     setIsPointerInside,
     pointerRef,
+    selectedIds,
+    setSelectedIds
 }: Props) {
     const stageRef = useRef(null);
     const lastPointerRef = useRef<{x:number,y:number} | null>(null);
@@ -42,6 +47,19 @@ export default function BoardCanvas({
                 o.id === id ? {...o, x, y} : o
             )
         )
+    }
+
+    function handleSelect(id: string, shift: boolean) {
+      if (shift) {
+        setSelectedIds(prev => {
+          if (prev.includes(id)) {
+            return prev.filter(x => x !== id);
+          }
+          return [...prev, id];
+        })
+      } else {
+        setSelectedIds([id]);
+      }
     }
 
     return (
@@ -56,6 +74,10 @@ export default function BoardCanvas({
         onMouseEnter={() => setIsPointerInside(true)}
         onMouseLeave={() => setIsPointerInside(false)}
         onMouseDown={(e) => {
+            if (e.target === e.target.getStage()) {
+              setSelectedIds([]);
+            }
+
             const stage = stageRef.current;
             const pointer = stage?.getPointerPosition();
             if (!pointer) return;
@@ -131,6 +153,9 @@ export default function BoardCanvas({
                 draggable = {mode !== "panning" && !isSpacePressed}
                 listening= {!isSpacePressed}
                 onMove={moveObject}
+
+                onSelect = {(id, shift) => handleSelect(id, shift)}
+                isSelected = {selectedIds.includes(obj.id)}
             />
           ))}
         </Layer>

@@ -1,5 +1,5 @@
 import "./App.css";
-import { useState, useEffect, useRef} from "react";
+import { useState, useEffect, useRef, type KeyboardEvent} from "react";
 import BoardCanvas from "./components/BoardCanvas";
 import type { BoardObject, CardType, InteractionMode} from "./types/board"
 
@@ -9,6 +9,7 @@ function App() {
   const [isPointerInside, setIsPointerInside] = useState(false);
   const [mode, setMode] = useState<InteractionMode>("idle");
   const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [objects, setObjects] = useState<BoardObject[]>([
     {
       id: "1",
@@ -85,7 +86,8 @@ function App() {
         window.removeEventListener("keyup", up);
       };
     }, []);
-
+  
+  
 
 
   return (
@@ -127,6 +129,9 @@ function App() {
         isSpacePressed = {isSpacePressed}
 
         pointerRef = {pointerRef}
+
+        selectedIds = {selectedIds}
+        setSelectedIds = {setSelectedIds}
       />
     </div>
   )
