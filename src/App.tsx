@@ -10,6 +10,8 @@ function App() {
   const [mode, setMode] = useState<InteractionMode>("idle");
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const clipboardRef = useRef<BoardObject[]>([]);
+  const pointerRef = useRef<{x: number, y: number} | null>(null);
   const [objects, setObjects] = useState<BoardObject[]>([
     {
       id: "1",
@@ -27,8 +29,6 @@ function App() {
     y: 0,
     zoom: 1,
   });
-  const pointerRef = useRef<{x: number, y: number} | null>(null);
-
 
   function createCard(x: number, y: number, type: CardType) {
     const width = 200;
@@ -87,7 +87,62 @@ function App() {
       };
     }, []);
   
-  
+  useEffect(() => {
+    function handleDelete(e: KeyboardEvent) {
+      const offset = 20; 
+
+      if (e.key === "Delete") {
+        setObjects(prev => 
+          prev.filter(obj => !selectedIds.includes(obj.id))
+        )
+        setSelectedIds([]);
+      }
+
+      if (e.ctrlKey && e.code === "KeyD" ||
+        e.shiftKey && e.code === "KeyD"
+      ) {
+        e.preventDefault();
+
+        const selected = objects.filter(o => selectedIds.includes(o.id));
+        if (selected.length === 0) return;
+
+        const duplicates = selected.map(o => ({
+          ...o,
+          id: crypto.randomUUID(),
+          x: o.x + offset,
+          y: o.y + offset
+        }));
+
+        setObjects(prev => [...prev, ...duplicates]);
+        setSelectedIds(duplicates.map(o => o.id));
+      }
+
+      if (e.ctrlKey && e.code === "KeyC") {
+        clipboardRef.current = objects.filter(o => selectedIds.includes(o.id));
+      }
+
+      if (e.ctrlKey && e.code === "KeyX") {
+        clipboardRef.current = objects.filter(o => selectedIds.includes(o.id));
+        setObjects(prev => prev.filter(o => !selectedIds.includes(o.id)));
+
+        setSelectedIds([]);
+      }
+
+      if (e.ctrlKey && e.code === "KeyV") {
+        const pasted = clipboardRef.current.map(o => ({
+          ...o,
+          id: crypto.randomUUID(),
+          x: o.x + offset,
+          y: o.y + offset,
+        }))
+
+        setObjects(prev => [...prev, ...pasted]);
+        setSelectedIds(pasted.map(o => o.id));
+      }
+    }
+    window.addEventListener("keydown", handleDelete);
+    return () => window.removeEventListener("keydown", handleDelete);
+  }, [selectedIds])
 
 
   return (
