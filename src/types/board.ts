@@ -1,4 +1,5 @@
 export type CardType = "image" | "text" | "tasks";
+export type InteractionMode = "idle" | "panning";
 
 export type BoardObject = {
   id: string
@@ -9,7 +10,6 @@ export type BoardObject = {
   height: number
   color: string
 }
-export type InteractionMode = "idle" | "panning";
 
 export type Camera = {
     x: number;
