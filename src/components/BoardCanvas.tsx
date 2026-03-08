@@ -70,6 +70,13 @@ export default function BoardCanvas({
       }
     }
 
+    function screenToWorld(pointer: {x:number,y:number}) {
+      return {
+        x: (pointer.x - camera.x) / camera.zoom,
+        y: (pointer.y - camera.y) / camera.zoom
+      }
+    }
+
     return (
         <Stage
         ref={stageRef}
@@ -82,36 +89,39 @@ export default function BoardCanvas({
         onMouseEnter={() => setIsPointerInside(true)}
         onMouseLeave={() => setIsPointerInside(false)}
         onMouseDown={(e) => {
-            if (e.target === e.target.getStage()) {
-              setSelectedIds([]);
-            }
 
-            const stage = stageRef.current;
-            const pointer = stage?.getPointerPosition();
-            if (!pointer) return;
+          const stage = stageRef.current;
+          const pointer = stage?.getPointerPosition();
+          if (!pointer) return;
 
-            const middleMouseButton = e.evt.button === 1;
-            const spacePan = e.evt.button === 0 && isSpacePressed;
+          const middleMouseButton = e.evt.button === 1;
+          const spacePan = e.evt.button === 0 && isSpacePressed;
 
-            if (middleMouseButton || spacePan) {
-                e.evt.preventDefault();
-                setMode("panning");
-                lastPointerRef.current = pointer;
-            }
+          if (middleMouseButton || spacePan) {
+            e.evt.preventDefault();
+            setMode("panning");
+            lastPointerRef.current = pointer;
+            return;
+          }
 
-            //selection box
-            if (!isSpacePressed && e.evt.button === 0 && e.target.className !== "Rect") {
-              setIsSelecting(true);
-              setSelectionRect({
-                x: pointer.x,
-                y: pointer.y,
-                width: 0,
-                height: 0
-              })
-            }
+          const clickedOnEmpty = e.target === e.target.getStage();
+
+          if (!isSpacePressed && e.evt.button === 0 && clickedOnEmpty) {
+
+            const world = screenToWorld(pointer);
+
+            setIsSelecting(true);
+
+            setSelectionRect({
+              x: world.x,
+              y: world.y,
+              width: 0,
+              height: 0
+            });
+          }
         }}
 
-        onMouseUp={() => {
+        onMouseUp={(e) => {
           setMode("idle")
           lastPointerRef.current = null;
 
@@ -119,32 +129,33 @@ export default function BoardCanvas({
             setIsSelecting(false);
             const box = selectionRect;
 
+            const boxX1 = Math.min(box.x, box.x + box.width);
+            const boxX2 = Math.max(box.x, box.x + box.width);
+            const boxY1 = Math.min(box.y, box.y + box.height);
+            const boxY2 = Math.max(box.y, box.y + box.height);
+
             const selected = objects.filter(obj => {
-              const x = obj.x + camera.x;
-              const y = obj.y + camera.y;
-              const width = obj.x + camera.x + obj.width;
-              const height = obj.y + camera.y + obj.height;
+              const ox1 = obj.x
+              const ox2 = obj.x + obj.width
+              const oy1 = obj.y
+              const oy2 = obj.y + obj.height
 
-              const boxX1 = Math.min(box.x, box.x + box.width);
-              const boxX2 = Math.max(box.x, box.x + box.width);
-              const boxY1 = Math.min(box.y, box.y + box.height);
-              const boxY2 = Math.max(box.y, box.y + box.height);
-
-              return(
-                x >= boxX1 && x <= boxX2 && y >= boxY1 && y <= boxY2
-                ||
-                width >= boxX1 && width <= boxX2 && height >= boxY1 && height <= boxY2
-                ||
-                x >= boxX1 && x <= boxX2 && height >= boxY1 && height <= boxY2
-                ||
-                width >= boxX1 && width <= boxX2 && y >= boxY1 && y <= boxY2
-              )
+              return !(ox2 < boxX1 || ox1 > boxX2 || oy2 < boxY1 || oy1 > boxY2)
             })
             .map(o => o.id)
 
-            setSelectedIds(selected);
+            if (e.evt.shiftKey) {
+              setSelectedIds(prev => {
+                return [...new Set([...prev, ...selected])]
+              })
+
+            } else {
+              setSelectedIds(selected);
+            }
+            
           }
         }}
+
         onMouseMove={() => {
             const stage = stageRef.current;
             const pointer = stage?.getPointerPosition();
@@ -152,10 +163,12 @@ export default function BoardCanvas({
             pointerRef.current = pointer;
 
             if (isSelecting) {
+              const world = screenToWorld(pointer);
+
               setSelectionRect(prev => ({
                 ...prev,
-                width: pointer.x - prev.x,
-                height: pointer.y - prev.y,
+                width: world.x - prev.x,
+                height: world.y - prev.y,
               }))
             }
 
@@ -224,10 +237,10 @@ export default function BoardCanvas({
               y={selectionRect.y}
               width={selectionRect.width}
               height={selectionRect.height}
+
               stroke={'rgba(87, 193, 255, 0.8)'}
-              fill={'rgba(0, 179, 255, 0.2)'}
-              dash={[4,4]}
-              opacity={0.4}
+              dash={[6,6]}
+              fill={'rgba(0, 179, 255, 0.06)'}
               cornerRadius={8}
             />
           )}
