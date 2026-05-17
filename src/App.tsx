@@ -49,7 +49,14 @@ function App() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.code === "KeyA" && !e.repeat) {
+      if (e.ctrlKey && e.code === "KeyA") {
+        e.preventDefault();
+        setSelectedIds(objects.map(o => o.id));
+
+        return;
+      }
+
+      if (e.code === "KeyA" && !e.repeat && !e.ctrlKey) {
         const pointer = pointerRef.current;
         if (!isPointerInside || !pointer) return;
 
@@ -62,7 +69,8 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [camera, isPointerInside]);
+  }, [camera, isPointerInside, objects]);
+  
 
   useEffect(() => {
       const down = (e: KeyboardEvent) => {
