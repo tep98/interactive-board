@@ -1,5 +1,5 @@
 import {Rect} from "react-konva";
-import {memo} from "react";
+import { memo, useRef } from "react"
 import type {BoardObject} from "../types/board"
 
 type Props = {
@@ -9,6 +9,12 @@ type Props = {
     onMove: (id: string, x: number, y: number) => void
     isSelected: boolean;
     onSelect: (id: string, shift: boolean) => void;
+    onGroupDragStart: (activeId: string, shift: boolean) => void;
+    onGroupMove: (
+    id:string,
+    x:number,
+    y:number
+    ) => void
 }
 
 function BoardObjectRenderer({
@@ -17,8 +23,12 @@ function BoardObjectRenderer({
     listening,
     onMove,
     isSelected,
-    onSelect
+    onSelect,
+    onGroupDragStart,
+    onGroupMove
 }: Props) {
+    const wasDraggingRef = useRef(false)
+
     if (object.type === "text") {
         return (
             <Rect
@@ -38,9 +48,58 @@ function BoardObjectRenderer({
                     onMove(object.id, e.target.x(), e.target.y())
                 }}
 
-                onMouseDown={(e) => {
-                    const shift = e.evt.shiftKey;
-                    onSelect(object.id, shift);
+                onMouseDown={() => {
+
+                wasDraggingRef.current = false
+
+                }}
+
+                onDragStart={(e) => {
+
+                wasDraggingRef.current = true
+
+                const shift = e.evt.shiftKey
+
+                // если объект не выделен —
+                // обновляем selection
+                if (!isSelected) {
+
+                    onSelect(object.id, shift)
+
+                }
+
+                onGroupDragStart(
+                    object.id,
+                    shift
+                )
+
+                }}
+
+                onDragMove={(e) => {
+
+                    const x = e.target.x()
+                    const y = e.target.y()
+
+                    if (isSelected) {
+                        onGroupMove(object.id, x, y)
+                    } else {
+                        onMove(object.id, x, y)
+                    }
+
+                }}
+
+                onClick={(e) => {
+
+                // если был drag —
+                // click игнорируем
+                if (wasDraggingRef.current) {
+                    return
+                }
+
+                const shift = e.evt.shiftKey
+
+                onSelect(object.id, shift)
+
                 }}
             />
         )

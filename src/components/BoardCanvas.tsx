@@ -42,6 +42,7 @@ export default function BoardCanvas({
     const stageRef = useRef(null);
     const lastPointerRef = useRef<{x:number,y:number} | null>(null);
     const [isSelecting, setIsSelecting] = useState(false);
+    const groupDragStartRef = useRef<Map<string, {x:number,y:number}>>(new Map())
     const [selectionRect, setSelectionRect] = useState({
       x: 0,
       y: 0,
@@ -75,6 +76,72 @@ export default function BoardCanvas({
         x: (pointer.x - camera.x) / camera.zoom,
         y: (pointer.y - camera.y) / camera.zoom
       }
+    }
+
+    function startGroupDrag(activeId: string, shift: boolean) {
+
+      const positions = new Map<
+        string,
+        {x:number,y:number}
+      >()
+
+      const dragSelection =
+        selectedIds.includes(activeId)
+        ? selectedIds
+        : shift
+        ? [...selectedIds, activeId]
+        : [activeId]
+
+      objects.forEach(obj => {
+
+        if (dragSelection.includes(obj.id)) {
+
+          positions.set(obj.id, {
+            x: obj.x,
+            y: obj.y
+          })
+
+        }
+
+      })
+
+      groupDragStartRef.current = positions
+    }
+
+    function moveGroup(
+      draggedId: string,
+      newX: number,
+      newY: number
+    ) {
+
+      const draggedStart =
+        groupDragStartRef.current.get(draggedId)
+
+      if (!draggedStart) return
+
+      const dx = newX - draggedStart.x
+      const dy = newY - draggedStart.y
+
+      setObjects(prev =>
+        prev.map(obj => {
+
+          if (!selectedIds.includes(obj.id)) {
+            return obj
+          }
+
+          const start =
+            groupDragStartRef.current.get(obj.id)
+
+          if (!start) return obj
+
+          return {
+            ...obj,
+            x: start.x + dx,
+            y: start.y + dy
+          }
+
+        })
+      )
     }
 
     return (
@@ -228,6 +295,9 @@ export default function BoardCanvas({
 
                 onSelect = {(id, shift) => handleSelect(id, shift)}
                 isSelected = {selectedIds.includes(obj.id)}
+
+                onGroupDragStart={startGroupDrag}
+                onGroupMove={moveGroup}
             />
           ))}
 
