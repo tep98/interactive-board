@@ -1,5 +1,5 @@
-import {Rect} from "react-konva";
-import { memo, useRef } from "react"
+import { Rect, Transformer } from "react-konva"
+import { memo, useEffect, useRef } from "react"
 import type {BoardObject} from "../types/board"
 
 type Props = {
@@ -15,6 +15,14 @@ type Props = {
     x:number,
     y:number
     ) => void
+
+    onResize: (
+    id: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+    ) => void
 }
 
 function BoardObjectRenderer({
@@ -25,18 +33,43 @@ function BoardObjectRenderer({
     isSelected,
     onSelect,
     onGroupDragStart,
-    onGroupMove
+    onGroupMove,
+    onResize
 }: Props) {
     const wasDraggingRef = useRef(false)
+    const shapeRef = useRef<any>(null)
+    const transformerRef = useRef<any>(null)
+
+    useEffect(() => {
+
+        if (
+            isSelected &&
+            transformerRef.current &&
+            shapeRef.current
+        ) {
+
+            transformerRef.current.nodes([
+            shapeRef.current
+            ])
+
+            transformerRef.current.getLayer()?.batchDraw()
+
+        }
+
+    }, [isSelected])
 
     if (object.type === "text") {
         return (
+            <>
             <Rect
                 x={object.x}
                 y={object.y}
                 width={object.width}
                 height={object.height}
                 fill={object.color}
+                ref={shapeRef}
+                strokeScaleEnabled={false}
+                perfectDrawEnabled={false}
 
                 stroke= {isSelected? "#4da3ff" : "black"}
                 strokeWidth={isSelected? 3 : 1}
@@ -101,7 +134,67 @@ function BoardObjectRenderer({
                 onSelect(object.id, shift)
 
                 }}
+
+                onTransformEnd={() => {
+
+                    const node = shapeRef.current
+
+                    if (!node) return
+
+                    const scaleX = node.scaleX()
+                    const scaleY = node.scaleY()
+
+                    // вычисляем новый размер
+                    const newWidth = Math.max(
+                        20,
+                        object.width * scaleX
+                    )
+
+                    const newHeight = Math.max(
+                        20,
+                        object.height * scaleY
+                    )
+
+                    // сохраняем позицию
+                    const newX = node.x()
+                    const newY = node.y()
+
+                    // сбрасываем scale
+                    node.scaleX(1)
+                    node.scaleY(1)
+
+                    // обновляем state
+                    onResize(
+                        object.id,
+                        newX,
+                        newY,
+                        newWidth,
+                        newHeight
+                    )
+
+                }}
             />
+
+            {isSelected && (
+            <Transformer
+                ref={transformerRef}
+                rotateEnabled={false}
+
+                boundBoxFunc={(oldBox, newBox) => {
+
+                    if (
+                        newBox.width < 40 ||
+                        newBox.height < 40
+                    ) {
+                        return oldBox
+                    }
+
+                    return newBox
+                }}
+            />
+            )}
+
+            </>
         )
     }
     

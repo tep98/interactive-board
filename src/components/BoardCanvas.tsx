@@ -58,6 +58,30 @@ export default function BoardCanvas({
         )
     }
 
+    function resizeObject(
+      id: string,
+      x: number,
+      y: number,
+      width: number,
+      height: number
+    ) {
+
+      setObjects(prev =>
+        prev.map(o =>
+          o.id === id
+            ? {
+                ...o,
+                x,
+                y,
+                width,
+                height
+              }
+            : o
+        )
+      )
+
+    }
+
     function handleSelect(id: string, shift: boolean) {
       if (shift) {
         setSelectedIds(prev => {
@@ -298,6 +322,8 @@ export default function BoardCanvas({
 
                 onGroupDragStart={startGroupDrag}
                 onGroupMove={moveGroup}
+                
+                onResize={resizeObject}
             />
           ))}
 
