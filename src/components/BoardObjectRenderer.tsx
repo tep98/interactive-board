@@ -179,6 +179,7 @@ function BoardObjectRenderer({
             <Transformer
                 ref={transformerRef}
                 rotateEnabled={false}
+                keepRatio={false}
 
                 boundBoxFunc={(oldBox, newBox) => {
 
