@@ -26,6 +26,10 @@ export default function Grid({
     gridSize = 50
     }
 
+    if (zoomAdjustedGrid > 60) {
+    gridSize = 60
+    }
+
     if (zoomAdjustedGrid > 100) {
     gridSize = 100
     }
@@ -39,7 +43,7 @@ export default function Grid({
     }
 
     const majorEvery =
-    gridSize >= 200
+    gridSize >= 60
         ? 3
         : 5
 
