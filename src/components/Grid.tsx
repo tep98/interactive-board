@@ -24,18 +24,22 @@ export default function Grid({
 
     if (zoomAdjustedGrid > 20) {
     gridSize = 50
+    console.log(50)
+    }
+
+    if (zoomAdjustedGrid > 40) {
+    gridSize = 80
+    console.log(70)
     }
 
     if (zoomAdjustedGrid > 60) {
-    gridSize = 60
+    gridSize = 110
+    console.log(100)
     }
 
-    if (zoomAdjustedGrid > 100) {
-    gridSize = 100
-    }
-
-    if (zoomAdjustedGrid > 200) {
-    gridSize = 200
+    if (zoomAdjustedGrid > 80) {
+    gridSize = 150
+    console.log(150)
     }
 
     if (zoomAdjustedGrid > 400) {
