@@ -1,204 +1,168 @@
-import {Stage, Layer, Rect} from "react-konva";
-import {useRef, useState} from "react";
+import { Stage, Layer, Rect } from "react-konva";
+import { useRef, useState } from "react";
 import BoardObjectRenderer from "./BoardObjectRenderer";
-import type { BoardObject, InteractionMode, Camera } from "../types/board"
-import Grid from "./Grid"
-import { snap } from "../utils/snap"
+import FloatingEditor from "./FloatingEditor";
+import type { BoardObject, InteractionMode, Camera } from "../types/board";
+import Grid from "./Grid";
+import { snap } from "../utils/snap";
+import { useTextEditor } from "../hooks/useTextEditor";
 
 type Props = {
-    objects: BoardObject[];
-    setObjects: React.Dispatch<React.SetStateAction<BoardObject[]>>;
-
-    camera: Camera;
-    setCamera: React.Dispatch<React.SetStateAction<Camera>>;
-
-    mode: InteractionMode;
-    setMode: (mode: InteractionMode) => void;
-
-    isSpacePressed: boolean;
-
-    isPointerInside: boolean;
-    setIsPointerInside: (value: boolean) => void;
-
-    pointerRef: React.MutableRefObject<{x:number, y:number} | null>;
-
-    selectedIds: string[];
-    setSelectedIds: (ids: string[]) => void;
+  objects: BoardObject[];
+  setObjects: React.Dispatch<React.SetStateAction<BoardObject[]>>;
+  camera: Camera;
+  setCamera: React.Dispatch<React.SetStateAction<Camera>>;
+  mode: InteractionMode;
+  setMode: (mode: InteractionMode) => void;
+  isSpacePressed: boolean;
+  isPointerInside: boolean;
+  setIsPointerInside: (value: boolean) => void;
+  pointerRef: React.MutableRefObject<{ x: number; y: number } | null>;
+  selectedIds: string[];
+  setSelectedIds: (ids: string[] | ((prev: string[]) => string[])) => void;
 };
 
-
 export default function BoardCanvas({
-    objects,
-    setObjects,
-    camera,
-    setCamera,
-    mode,
-    setMode,
-    isSpacePressed,
-    isPointerInside,
-    setIsPointerInside,
-    pointerRef,
-    selectedIds,
-    setSelectedIds
+  objects,
+  setObjects,
+  camera,
+  setCamera,
+  mode,
+  setMode,
+  isSpacePressed,
+  isPointerInside,
+  setIsPointerInside,
+  pointerRef,
+  selectedIds,
+  setSelectedIds,
 }: Props) {
-    const stageRef = useRef(null);
-    const lastPointerRef = useRef<{x:number,y:number} | null>(null);
-    const [isSelecting, setIsSelecting] = useState(false);
-    const groupDragStartRef = useRef<Map<string, {x:number,y:number}>>(new Map())
-    const [selectionRect, setSelectionRect] = useState({
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0
-    });
+  const stageRef = useRef(null);
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const [selectionRect, setSelectionRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
-    function moveObject(
-      id:string,
-      x:number,
-      y:number
-    ) {
-
-      const gridSize = 25
-
-      const snappedX = snap(x, gridSize)
-      const snappedY = snap(y, gridSize)
-
+  // ── Редактор ─────────────────────────────────────────────────────────────────
+  const {
+    editor,
+    textareaRef,
+    openEditor,
+    closeEditor,
+    handleChange,
+    updateEditorGeometry,
+  } = useTextEditor({
+    camera,
+    onCommit(id, field, value) {
       setObjects((prev) =>
-        prev.map(o =>
-          o.id === id
-            ? {
-                ...o,
-                x: snappedX,
-                y: snappedY
-              }
-            : o
-        )
+        prev.map((o) => (o.id === id ? { ...o, [field]: value } : o))
+      );
+    },
+  });
+
+  const editingObjectId = editor?.target.objectId ?? null;
+  const editingField = editor?.target.field ?? null;
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  function moveObject(id: string, x: number, y: number) {
+    const gridSize = 25;
+    setObjects((prev) =>
+      prev.map((o) =>
+        o.id === id ? { ...o, x: snap(x, gridSize), y: snap(y, gridSize) } : o
       )
+    );
+  }
 
-    }
+  function resizeObject(id: string, x: number, y: number, width: number, height: number) {
+    setObjects((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, x, y, width, height } : o))
+    );
+  }
 
-    function resizeObject(
-      id: string,
-      x: number,
-      y: number,
-      width: number,
-      height: number
-    ) {
-
-      setObjects(prev =>
-        prev.map(o =>
-          o.id === id
-            ? {
-                ...o,
-                x,
-                y,
-                width,
-                height
-              }
-            : o
-        )
-      )
-
-    }
-
-    function handleSelect(id: string, shift: boolean) {
-      if (shift) {
-        setSelectedIds(prev => {
-          if (prev.includes(id)) {
-            return prev.filter(x => x !== id);
-          }
-          return [...prev, id];
-        })
-      } else {
-        setSelectedIds([id]);
+  // Live resize — обновляем стейт и двигаем редактор вместе с карточкой
+  function resizeObjectLive(id: string, x: number, y: number, width: number, height: number) {
+    setObjects((prev) => {
+      const updated = prev.map((o) =>
+        o.id === id ? { ...o, x, y, width, height } : o
+      );
+      // Если редактируем этот объект — обновляем позицию textarea
+      if (editingObjectId === id) {
+        const obj = updated.find((o) => o.id === id);
+        if (obj) updateEditorGeometry(obj);
       }
-    }
+      return updated;
+    });
+  }
 
-    function screenToWorld(pointer: {x:number,y:number}) {
-      return {
-        x: (pointer.x - camera.x) / camera.zoom,
-        y: (pointer.y - camera.y) / camera.zoom
+  function handleSelect(id: string, shift: boolean) {
+    if (shift) {
+      setSelectedIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      );
+    } else {
+      setSelectedIds([id]);
+    }
+  }
+
+  function screenToWorld(pointer: { x: number; y: number }) {
+    return {
+      x: (pointer.x - camera.x) / camera.zoom,
+      y: (pointer.y - camera.y) / camera.zoom,
+    };
+  }
+
+  function startGroupDrag(activeId: string, shift: boolean) {
+    const positions = new Map<string, { x: number; y: number }>();
+    const dragSelection = selectedIds.includes(activeId)
+      ? selectedIds
+      : shift
+      ? [...selectedIds, activeId]
+      : [activeId];
+
+    objects.forEach((obj) => {
+      if (dragSelection.includes(obj.id)) {
+        positions.set(obj.id, { x: obj.x, y: obj.y });
       }
-    }
+    });
+    groupDragStartRef.current = positions;
+  }
 
-    function startGroupDrag(activeId: string, shift: boolean) {
+  function moveGroup(draggedId: string, newX: number, newY: number) {
+    const draggedStart = groupDragStartRef.current.get(draggedId);
+    if (!draggedStart) return;
+    const dx = newX - draggedStart.x;
+    const dy = newY - draggedStart.y;
 
-      const positions = new Map<
-        string,
-        {x:number,y:number}
-      >()
-
-      const dragSelection =
-        selectedIds.includes(activeId)
-        ? selectedIds
-        : shift
-        ? [...selectedIds, activeId]
-        : [activeId]
-
-      objects.forEach(obj => {
-
-        if (dragSelection.includes(obj.id)) {
-
-          positions.set(obj.id, {
-            x: obj.x,
-            y: obj.y
-          })
-
-        }
-
+    setObjects((prev) =>
+      prev.map((obj) => {
+        if (!selectedIds.includes(obj.id)) return obj;
+        const start = groupDragStartRef.current.get(obj.id);
+        if (!start) return obj;
+        return { ...obj, x: start.x + dx, y: start.y + dy };
       })
+    );
+  }
 
-      groupDragStartRef.current = positions
-    }
-
-    function moveGroup(
-      draggedId: string,
-      newX: number,
-      newY: number
-    ) {
-
-      const draggedStart =
-        groupDragStartRef.current.get(draggedId)
-
-      if (!draggedStart) return
-
-      const dx = newX - draggedStart.x
-      const dy = newY - draggedStart.y
-
-      setObjects(prev =>
-        prev.map(obj => {
-
-          if (!selectedIds.includes(obj.id)) {
-            return obj
-          }
-
-          const start =
-            groupDragStartRef.current.get(obj.id)
-
-          if (!start) return obj
-
-          return {
-            ...obj,
-            x: start.x + dx,
-            y: start.y + dy
-          }
-
-        })
-      )
-    }
-
-    return (
-        <Stage
+  return (
+    <>
+      <Stage
         ref={stageRef}
         width={window.innerWidth}
         height={window.innerHeight}
         style={{
-          cursor: mode === "panning" ? "grabbing" : isSpacePressed ? "grab" : "default",
+          cursor:
+            mode === "panning"
+              ? "grabbing"
+              : isSpacePressed
+              ? "grab"
+              : "default",
         }}
-        
         onMouseEnter={() => setIsPointerInside(true)}
         onMouseLeave={() => setIsPointerInside(false)}
         onMouseDown={(e) => {
+          if (editor) {
+            closeEditor();
+            return;
+          }
 
           const stage = stageRef.current;
           const pointer = stage?.getPointerPosition();
@@ -215,87 +179,62 @@ export default function BoardCanvas({
           }
 
           const clickedOnEmpty = e.target === e.target.getStage();
-
           if (!isSpacePressed && e.evt.button === 0 && clickedOnEmpty) {
-
+            // Клик по пустому месту — снимаем выделение
+            setSelectedIds([]);
             const world = screenToWorld(pointer);
-
             setIsSelecting(true);
-
-            setSelectionRect({
-              x: world.x,
-              y: world.y,
-              width: 0,
-              height: 0
-            });
+            setSelectionRect({ x: world.x, y: world.y, width: 0, height: 0 });
           }
         }}
-
         onMouseUp={(e) => {
-          setMode("idle")
+          setMode("idle");
           lastPointerRef.current = null;
 
           if (isSelecting) {
             setIsSelecting(false);
             const box = selectionRect;
-
             const boxX1 = Math.min(box.x, box.x + box.width);
             const boxX2 = Math.max(box.x, box.x + box.width);
             const boxY1 = Math.min(box.y, box.y + box.height);
             const boxY2 = Math.max(box.y, box.y + box.height);
 
-            const selected = objects.filter(obj => {
-              const ox1 = obj.x
-              const ox2 = obj.x + obj.width
-              const oy1 = obj.y
-              const oy2 = obj.y + obj.height
-
-              return !(ox2 < boxX1 || ox1 > boxX2 || oy2 < boxY1 || oy1 > boxY2)
-            })
-            .map(o => o.id)
+            const selected = objects
+              .filter((obj) => {
+                const ox2 = obj.x + obj.width;
+                const oy2 = obj.y + obj.height;
+                return !(ox2 < boxX1 || obj.x > boxX2 || oy2 < boxY1 || obj.y > boxY2);
+              })
+              .map((o) => o.id);
 
             if (e.evt.shiftKey) {
-              setSelectedIds(prev => {
-                return [...new Set([...prev, ...selected])]
-              })
-
+              setSelectedIds((prev) => [...new Set([...prev, ...selected])]);
             } else {
               setSelectedIds(selected);
             }
-            
           }
         }}
-
         onMouseMove={() => {
-            const stage = stageRef.current;
-            const pointer = stage?.getPointerPosition();
-            if (!pointer) return;
-            pointerRef.current = pointer;
+          const stage = stageRef.current;
+          const pointer = stage?.getPointerPosition();
+          if (!pointer) return;
+          pointerRef.current = pointer;
 
-            if (isSelecting) {
-              const world = screenToWorld(pointer);
+          if (isSelecting) {
+            const world = screenToWorld(pointer);
+            setSelectionRect((prev) => ({
+              ...prev,
+              width: world.x - prev.x,
+              height: world.y - prev.y,
+            }));
+          }
 
-              setSelectionRect(prev => ({
-                ...prev,
-                width: world.x - prev.x,
-                height: world.y - prev.y,
-              }))
-            }
-
-            if (mode != "panning" || !lastPointerRef.current) return;
-            
-            const dx = pointer.x - lastPointerRef.current.x;
-            const dy = pointer.y - lastPointerRef.current.y;
-
-            setCamera((prev) => ({
-            ...prev,
-            x: prev.x + dx,
-            y: prev.y + dy,
-            }))
-
-            lastPointerRef.current = pointer;
+          if (mode !== "panning" || !lastPointerRef.current) return;
+          const dx = pointer.x - lastPointerRef.current.x;
+          const dy = pointer.y - lastPointerRef.current.y;
+          setCamera((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+          lastPointerRef.current = pointer;
         }}
-
         onWheel={(e) => {
           const stage = stageRef.current;
           const pointer = stage?.getPointerPosition();
@@ -305,52 +244,39 @@ export default function BoardCanvas({
           const oldZoom = camera.zoom;
           const direction = e.evt.deltaY > 0 ? -1 : 1;
           const newZoom = direction > 0 ? oldZoom * scaleBy : oldZoom / scaleBy;
-          const clampedZoom = Math.max(0.2, Math.min(newZoom,4));
+          const clampedZoom = Math.max(0.2, Math.min(newZoom, 4));
 
           const mousePointTo = {
             x: (pointer.x - camera.x) / oldZoom,
             y: (pointer.y - camera.y) / oldZoom,
-          }
-
-          const newCameraX = pointer.x - mousePointTo.x * clampedZoom;
-          const newCameraY = pointer.y - mousePointTo.y * clampedZoom;
+          };
 
           setCamera({
-            x: newCameraX,
-            y: newCameraY,
+            x: pointer.x - mousePointTo.x * clampedZoom,
+            y: pointer.y - mousePointTo.y * clampedZoom,
             zoom: clampedZoom,
-          })
+          });
         }}
       >
-        <Layer
-          x={camera.x}
-          y={camera.y}
-          scaleX={camera.zoom}
-          scaleY={camera.zoom}
-        >
-
-          <Grid
-            camera={camera}
-            width={window.innerWidth}
-            height={window.innerHeight}
-          />
-
+        <Layer x={camera.x} y={camera.y} scaleX={camera.zoom} scaleY={camera.zoom}>
+          <Grid camera={camera} width={window.innerWidth} height={window.innerHeight} />
 
           {objects.map((obj) => (
             <BoardObjectRenderer
-                key = {obj.id}
-                object = {obj}
-                draggable = {mode !== "panning" && !isSpacePressed}
-                listening= {!isSpacePressed}
-                onMove={moveObject}
-
-                onSelect = {(id, shift) => handleSelect(id, shift)}
-                isSelected = {selectedIds.includes(obj.id)}
-
-                onGroupDragStart={startGroupDrag}
-                onGroupMove={moveGroup}
-                
-                onResize={resizeObject}
+              key={obj.id}
+              object={obj}
+              draggable={mode !== "panning" && !isSpacePressed}
+              listening={!isSpacePressed}
+              isSelected={selectedIds.includes(obj.id)}
+              editingField={editingObjectId === obj.id ? editingField : null}
+              onMove={moveObject}
+              onSelect={(id, shift) => handleSelect(id, shift)}
+              onGroupDragStart={startGroupDrag}
+              onGroupMove={moveGroup}
+              onResize={resizeObject}
+              onResizeLive={resizeObjectLive}
+              onEditTitle={(obj) => openEditor(obj, "title")}
+              onEditContent={(obj) => openEditor(obj, "content")}
             />
           ))}
 
@@ -360,14 +286,23 @@ export default function BoardCanvas({
               y={selectionRect.y}
               width={selectionRect.width}
               height={selectionRect.height}
-
-              stroke={'rgba(87, 193, 255, 0.8)'}
-              dash={[6,6]}
-              fill={'rgba(0, 179, 255, 0.06)'}
+              stroke="rgba(87, 193, 255, 0.8)"
+              dash={[6, 6]}
+              fill="rgba(0, 179, 255, 0.06)"
               cornerRadius={8}
             />
           )}
         </Layer>
       </Stage>
-    )
+
+      {editor && (
+        <FloatingEditor
+          editor={editor}
+          textareaRef={textareaRef}
+          onChange={handleChange}
+          onClose={closeEditor}
+        />
+      )}
+    </>
+  );
 }
