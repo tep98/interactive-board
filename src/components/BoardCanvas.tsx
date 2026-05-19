@@ -2,6 +2,8 @@ import {Stage, Layer, Rect} from "react-konva";
 import {useRef, useState} from "react";
 import BoardObjectRenderer from "./BoardObjectRenderer";
 import type { BoardObject, InteractionMode, Camera } from "../types/board"
+import Grid from "./Grid"
+import { snap } from "../utils/snap"
 
 type Props = {
     objects: BoardObject[];
@@ -50,12 +52,29 @@ export default function BoardCanvas({
       height: 0
     });
 
-    function moveObject(id:string, x:number, y:number) {
-        setObjects((prev) => 
-            prev.map(o => 
-                o.id === id ? {...o, x, y} : o
-            )
+    function moveObject(
+      id:string,
+      x:number,
+      y:number
+    ) {
+
+      const gridSize = 25
+
+      const snappedX = snap(x, gridSize)
+      const snappedY = snap(y, gridSize)
+
+      setObjects((prev) =>
+        prev.map(o =>
+          o.id === id
+            ? {
+                ...o,
+                x: snappedX,
+                y: snappedY
+              }
+            : o
         )
+      )
+
     }
 
     function resizeObject(
@@ -309,6 +328,14 @@ export default function BoardCanvas({
           scaleX={camera.zoom}
           scaleY={camera.zoom}
         >
+
+          <Grid
+            camera={camera}
+            width={window.innerWidth}
+            height={window.innerHeight}
+          />
+
+
           {objects.map((obj) => (
             <BoardObjectRenderer
                 key = {obj.id}
