@@ -13,7 +13,9 @@ const C = {
   bg: "#26262b",
   bgHover: "#2c2c32",
   border: "rgba(255,255,255,0.07)",
-  borderSelected: "#4da3ff",
+  borderSelected: "#4d4d57",
+  anchorStroke: "#4d4d57",
+  anchorFill: "#101418",
   titleText: "#f0f0f0",
   titlePlaceholder: "rgba(255,255,255,0.18)",
   contentText: "#b8b8c4",
@@ -361,11 +363,37 @@ function TextCard({
       {isSelected && (
         <Transformer
           ref={transformerRef}
+
           rotateEnabled={false}
+
           keepRatio={false}
+
+          borderStroke="#3a3a42"
+          borderStrokeWidth={0}
+
+          anchorStroke= {C.anchorStroke}
+          anchorFill= {C.anchorFill}
+          
+
+          anchorSize={10}
+
+          anchorCornerRadius={999}
+
+          anchorStrokeWidth={2}
+
+          ignoreStroke={true}
+
           boundBoxFunc={(oldBox, newBox) => {
-            if (newBox.width < 160 || newBox.height < 100) return oldBox;
+
+            if (
+              newBox.width < 160 ||
+              newBox.height < 100
+            ) {
+              return oldBox;
+            }
+
             return newBox;
+
           }}
         />
       )}
