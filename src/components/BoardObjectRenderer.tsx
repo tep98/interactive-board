@@ -1,6 +1,7 @@
 import { memo } from "react";
-import type { BoardObject } from "../types/board";
+import type { BoardObject, TaskItem } from "../types/board";
 import TextCard from "./TextCard";
+import TasksCard from "./TasksCard";
 
 type Props = {
   object: BoardObject;
@@ -17,16 +18,16 @@ type Props = {
   onResizeLive: (id: string, x: number, y: number, width: number, height: number) => void;
   onEditTitle: (obj: BoardObject) => void;
   onEditContent: (obj: BoardObject) => void;
+  onUpdateTasks?: (id: string, tasks: TaskItem[]) => void;
+  onUpdateObject?: (id: string, patch: Partial<BoardObject>) => void;
 };
 
 function BoardObjectRenderer(props: Props) {
   switch (props.object.type) {
     case "text":
       return <TextCard {...props} />;
-    // case "image":
-    //   return <ImageCard {...props} />;
-    // case "tasks":
-    //   return <TasksCard {...props} />;
+    case "tasks":
+      return <TasksCard {...props} />;
     default:
       return null;
   }

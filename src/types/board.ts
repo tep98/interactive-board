@@ -1,6 +1,12 @@
 export type CardType = "image" | "text" | "tasks";
 export type InteractionMode = "idle" | "panning";
 
+export type TaskItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
 export type BoardObject = {
   id: string;
   type: CardType;
@@ -9,9 +15,15 @@ export type BoardObject = {
   width: number;
   height: number;
   color: string;
-  // Контент карточки
+  // Контент текстовой карточки
   title?: string;
   content?: string;
+  // Контент карточки-списка
+  tasks?: TaskItem[];
+  // false = обычный список (без чекбоксов), true = с чекбоксами (по умолчанию)
+  checkboxMode?: boolean;
+  // true = чекбоксы заблокированы (нельзя менять состояние)
+  tasksLocked?: boolean;
 };
 
 export type Camera = {

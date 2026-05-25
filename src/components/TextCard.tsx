@@ -86,7 +86,6 @@ function TextCard({
   // но drag идёт всегда через основной shape.
 
   function handlePointerDown(e: any) {
-
     e.cancelBubble = true;
 
     pointerStartRef.current = {
@@ -95,27 +94,22 @@ function TextCard({
     };
 
     isDraggingRef.current = false;
-
   }
 
   function handlePointerMove(e: any) {
-
     if (!pointerStartRef.current) return;
 
     const dx =
       e.evt.clientX -
       pointerStartRef.current.x;
-
     const dy =
       e.evt.clientY -
       pointerStartRef.current.y;
-
     const distance =
       Math.sqrt(dx * dx + dy * dy);
 
     // threshold
     if (distance > 4) {
-
       isDraggingRef.current = true;
 
       if (
@@ -123,19 +117,13 @@ function TextCard({
         shapeRef.current &&
         !shapeRef.current.isDragging()
       ) {
-
         shapeRef.current.startDrag(e);
-
       }
-
     }
-
   }
 
   function handlePointerUp() {
-
     pointerStartRef.current = null;
-
   }
 
   function handleDragStart(e: any) {
@@ -363,37 +351,20 @@ function TextCard({
       {isSelected && (
         <Transformer
           ref={transformerRef}
-
           rotateEnabled={false}
-
           keepRatio={false}
-
           borderStroke="#3a3a42"
           borderStrokeWidth={0}
-
           anchorStroke= {C.anchorStroke}
           anchorFill= {C.anchorFill}
-          
-
           anchorSize={10}
-
           anchorCornerRadius={999}
-
           anchorStrokeWidth={2}
-
           ignoreStroke={true}
 
           boundBoxFunc={(oldBox, newBox) => {
-
-            if (
-              newBox.width < 160 ||
-              newBox.height < 100
-            ) {
-              return oldBox;
-            }
-
+            if (newBox.width < 160 || newBox.height < 100) return oldBox;
             return newBox;
-
           }}
         />
       )}

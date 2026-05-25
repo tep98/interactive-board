@@ -2,7 +2,7 @@ import { Stage, Layer, Rect } from "react-konva";
 import { useRef, useState } from "react";
 import BoardObjectRenderer from "./BoardObjectRenderer";
 import FloatingEditor from "./FloatingEditor";
-import type { BoardObject, InteractionMode, Camera } from "../types/board";
+import type { BoardObject, InteractionMode, Camera, TaskItem } from "../types/board";
 import Grid from "./Grid";
 import { snap } from "../utils/snap";
 import { useTextEditor } from "../hooks/useTextEditor";
@@ -20,6 +20,8 @@ type Props = {
   pointerRef: React.MutableRefObject<{ x: number; y: number } | null>;
   selectedIds: string[];
   setSelectedIds: (ids: string[] | ((prev: string[]) => string[])) => void;
+  onUpdateTasks?: (id: string, tasks: TaskItem[]) => void;
+  onUpdateObject?: (id: string, patch: Partial<BoardObject>) => void;
 };
 
 export default function BoardCanvas({
@@ -35,6 +37,8 @@ export default function BoardCanvas({
   pointerRef,
   selectedIds,
   setSelectedIds,
+  onUpdateTasks,
+  onUpdateObject,
 }: Props) {
   const stageRef = useRef(null);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
@@ -42,7 +46,6 @@ export default function BoardCanvas({
   const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const [selectionRect, setSelectionRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
-  // ── Редактор ─────────────────────────────────────────────────────────────────
   const {
     editor,
     textareaRef,
@@ -61,7 +64,6 @@ export default function BoardCanvas({
 
   const editingObjectId = editor?.target.objectId ?? null;
   const editingField = editor?.target.field ?? null;
-  // ─────────────────────────────────────────────────────────────────────────────
 
   function moveObject(id: string, x: number, y: number) {
     const gridSize = 25;
@@ -78,13 +80,11 @@ export default function BoardCanvas({
     );
   }
 
-  // Live resize — обновляем стейт и двигаем редактор вместе с карточкой
   function resizeObjectLive(id: string, x: number, y: number, width: number, height: number) {
     setObjects((prev) => {
       const updated = prev.map((o) =>
         o.id === id ? { ...o, x, y, width, height } : o
       );
-      // Если редактируем этот объект — обновляем позицию textarea
       if (editingObjectId === id) {
         const obj = updated.find((o) => o.id === id);
         if (obj) updateEditorGeometry(obj);
@@ -93,15 +93,37 @@ export default function BoardCanvas({
     });
   }
 
-  function handleSelect(id: string, shift: boolean) {
+  function handleSelect(
+    id: string,
+    shift: boolean
+  ) {
+    setObjects(prev => {
+      const target =
+        prev.find(o => o.id === id);
+
+      if (!target) return prev;
+
+      const without =
+        prev.filter(o => o.id !== id);
+
+      return [
+        ...without,
+        target
+      ];
+    });
+
     if (shift) {
-      setSelectedIds((prev) =>
-        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      setSelectedIds(prev =>
+        prev.includes(id)
+          ? prev.filter(x => x !== id)
+          : [...prev, id]
       );
+
     } else {
       setSelectedIds([id]);
     }
   }
+  
 
   function screenToWorld(pointer: { x: number; y: number }) {
     return {
@@ -180,7 +202,6 @@ export default function BoardCanvas({
 
           const clickedOnEmpty = e.target === e.target.getStage();
           if (!isSpacePressed && e.evt.button === 0 && clickedOnEmpty) {
-            // Клик по пустому месту — снимаем выделение
             setSelectedIds([]);
             const world = screenToWorld(pointer);
             setIsSelecting(true);
@@ -277,6 +298,8 @@ export default function BoardCanvas({
               onResizeLive={resizeObjectLive}
               onEditTitle={(obj) => openEditor(obj, "title")}
               onEditContent={(obj) => openEditor(obj, "content")}
+              onUpdateTasks={onUpdateTasks}
+              onUpdateObject={onUpdateObject}
             />
           ))}
 
