@@ -1,4 +1,4 @@
-import { Rect, Image as KonvaImage, Transformer, Group, Text } from "react-konva";
+import { Rect, Image as KonvaImage, Transformer, Group, Text, Line } from "react-konva";
 import { Html } from "react-konva-utils";
 import { memo, useEffect, useRef, useState, useCallback } from "react";
 import type { BoardObject } from "../types/board";
@@ -19,12 +19,16 @@ const C = {
   tabPlaceholder: "rgba(255,255,255,0.22)",
 };
 
-// Отступ сверху для кармашка (он выступает над карточкой)
 const TAB_HEIGHT = 28;
 const TAB_MIN_WIDTH = 80;
 const TAB_PADDING_H = 10;
 const TAB_FONT_SIZE = 12;
 const TAB_CORNER = 6;
+
+// Цвета дропзоны для Konva (без HTML)
+const DROPZONE_ICON_COLOR = "rgba(255,255,255,0.18)";
+const DROPZONE_TEXT_COLOR = "rgba(255,255,255,0.45)";
+const DROPZONE_LINK_COLOR = "rgba(87,193,255,0.7)";
 
 type Props = {
   object: BoardObject;
@@ -58,7 +62,9 @@ function ImageCard({
   const shapeRef = useRef<any>(null);
   const transformerRef = useRef<any>(null);
   const isDraggingRef = useRef(false);
+  // Сохраняем начальную позицию указателя и позицию узла в момент начала drag
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const nodeStartRef = useRef<{ x: number; y: number } | null>(null);
   const isShiftRef = useRef(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -68,7 +74,7 @@ function ImageCard({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasImage = !!object.imageSrc;
-  const hasCaption = object.caption !== undefined; // кармашек виден если не undefined
+  const hasCaption = object.caption !== undefined;
   const caption = object.caption ?? "";
 
   // Загружаем изображение в HTMLImageElement для Konva
@@ -100,6 +106,7 @@ function ImageCard({
   }, [editingCaption]);
 
   // Слушаем Shift для пропорционального ресайза
+  // По умолчанию ресайз НЕПРОПОРЦИОНАЛЬНЫЙ, Shift = ПРОПОРЦИОНАЛЬНЫЙ
   useEffect(() => {
     const down = (e: KeyboardEvent) => { if (e.key === "Shift") isShiftRef.current = true; };
     const up = (e: KeyboardEvent) => { if (e.key === "Shift") isShiftRef.current = false; };
@@ -118,7 +125,6 @@ function ImageCard({
     reader.onload = (ev) => {
       const src = ev.target?.result as string;
       if (!src) return;
-      // Подгоняем размер карточки под пропорции изображения
       const img = new window.Image();
       img.src = src;
       img.onload = () => {
@@ -135,7 +141,7 @@ function ImageCard({
     reader.readAsDataURL(file);
   }, [object.id, object.width, onUpdateObject]);
 
-  // ── Вставка из буфера обмена (глобально, когда карточка выбрана) ──────────
+  // ── Вставка из буфера обмена ─────────────────────────────────────────────────
   useEffect(() => {
     if (!isSelected) return;
     const handler = async (e: ClipboardEvent) => {
@@ -154,10 +160,42 @@ function ImageCard({
     return () => window.removeEventListener("paste", handler);
   }, [isSelected, loadImageFile]);
 
-  // ── Drag ─────────────────────────────────────────────────────────────────────
+  // ── Активация дроп-оверлея только при drag файла из ОС ──────────────────────
+  // dragenter на window срабатывает когда файл входит в окно браузера;
+  // dragleave на window — когда уходит за пределы окна.
+  // Это позволяет держать pointerEvents:none в обычном режиме (не мешает Konva drag)
+  // и включать оверлей только когда реально тащат файл.
+  useEffect(() => {
+    if (hasImage) return;
+    let enterCount = 0; // счётчик для вложенных dragenter/dragleave
+    const onEnter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      enterCount++;
+      if (enterCount === 1) setIsDragOver(true);
+    };
+    const onLeave = () => {
+      enterCount--;
+      if (enterCount <= 0) { enterCount = 0; setIsDragOver(false); }
+    };
+    const onDrop = () => { enterCount = 0; setIsDragOver(false); };
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [hasImage]);
+
+  // ── Drag через Konva (для Rect-фона) ─────────────────────────────────────────
   function handlePointerDown(e: any) {
     e.cancelBubble = true;
     pointerStartRef.current = { x: e.evt.clientX, y: e.evt.clientY };
+    // Запоминаем текущую позицию узла
+    if (shapeRef.current) {
+      nodeStartRef.current = { x: shapeRef.current.x(), y: shapeRef.current.y() };
+    }
     isDraggingRef.current = false;
   }
 
@@ -175,21 +213,31 @@ function ImageCard({
 
   function handlePointerUp() {
     pointerStartRef.current = null;
+    nodeStartRef.current = null;
   }
 
+  // ── Drag через HTML (дропзона, кармашек) ─────────────────────────────────────
+  // ИСПРАВЛЕНИЕ: при startDrag из HTML мышь уже не в "центре" узла —
+  // нужно явно восстанавливать позицию узла, чтобы не было прыжка.
   function handleHtmlPointerDown(e: React.PointerEvent) {
     e.stopPropagation();
     pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    if (shapeRef.current) {
+      nodeStartRef.current = { x: shapeRef.current.x(), y: shapeRef.current.y() };
+    }
     isDraggingRef.current = false;
   }
 
   function handleHtmlPointerMove(e: React.PointerEvent) {
-    if (!pointerStartRef.current) return;
+    if (!pointerStartRef.current || !nodeStartRef.current) return;
     const dx = e.clientX - pointerStartRef.current.x;
     const dy = e.clientY - pointerStartRef.current.y;
     if (Math.sqrt(dx * dx + dy * dy) > 4) {
       isDraggingRef.current = true;
       if (draggable && shapeRef.current && !shapeRef.current.isDragging()) {
+        // Восстанавливаем исходную позицию перед startDrag чтобы не было прыжка
+        shapeRef.current.x(nodeStartRef.current.x);
+        shapeRef.current.y(nodeStartRef.current.y);
         shapeRef.current.startDrag({ evt: e.nativeEvent });
       }
     }
@@ -197,6 +245,7 @@ function ImageCard({
 
   function handleHtmlPointerUp() {
     pointerStartRef.current = null;
+    nodeStartRef.current = null;
   }
 
   function handleDragStart(e: any) {
@@ -220,6 +269,15 @@ function ImageCard({
   function handleClick(e: any) {
     if (isDraggingRef.current) return;
     onSelect(object.id, e.evt?.shiftKey ?? false);
+    // Пустая карточка — открыть файловый пикер по клику в любом месте
+    if (!hasImage) {
+      fileInputRef.current?.click();
+    }
+  }
+
+  // Клик по дропзоне (Konva) — делегируем в handleClick
+  function handleDropzoneClick(e: any) {
+    handleClick(e);
   }
 
   // ── Resize ───────────────────────────────────────────────────────────────────
@@ -243,22 +301,44 @@ function ImageCard({
     onResize(object.id, node.x(), node.y(), Math.max(80, node.width()), Math.max(60, node.height()));
   }
 
-  // ── Caption: ширина кармашка ─────────────────────────────────────────────────
+  // ── Caption geometry ─────────────────────────────────────────────────────────
   const captionText = caption || "";
   const tabTextWidth = Math.max(
     TAB_MIN_WIDTH,
-    captionText.length * TAB_FONT_SIZE * 0.58 + TAB_PADDING_H * 2 + 20 // +20 для крестика
+    captionText.length * TAB_FONT_SIZE * 0.58 + TAB_PADDING_H * 2 + 20
   );
   const tabWidth = Math.min(tabTextWidth, object.width - 16);
-  const tabX = object.x + 12; // небольшой отступ слева
-  const tabY = object.y - TAB_HEIGHT + 4; // выступает над карточкой
+  const tabX = object.x + 12;
+  const tabY = object.y - TAB_HEIGHT + 4;
 
-  // ── Drop zone HTML ────────────────────────────────────────────────────────────
-  // Показываем только если нет изображения
-  const dropzoneY = object.y; // позиция в мировых координатах
+  // ── Dropzone Konva geometry ───────────────────────────────────────────────────
+  const cx = object.x + object.width / 2;
+  const cy = object.y + object.height / 2;
+  const iconSize = 36;
+  const iconX = cx - iconSize / 2;
+  const iconY = cy - iconSize / 2 - 20;
+  const textY = iconY + iconSize + 10;
+  const linkY = textY + 18;
 
   return (
     <>
+      {/* ── Скрытый file input (в DOM, вне canvas) — управляется через fileInputRef ── */}
+      {!hasImage && (
+        <Html groupProps={{ x: 0, y: 0, listening: false }} divProps={{ style: { pointerEvents: "none" } }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) loadImageFile(file);
+              e.target.value = "";
+            }}
+          />
+        </Html>
+      )}
+
       {/* ── Фон / placeholder ── */}
       <Rect
         ref={shapeRef}
@@ -266,10 +346,19 @@ function ImageCard({
         y={object.y}
         width={object.width}
         height={object.height}
-        fill={hasImage ? "transparent" : C.dropzoneBg}
+        fill={hasImage ? "transparent" : isDragOver ? C.dropzoneHover : C.dropzoneBg}
         cornerRadius={hasImage ? 0 : 10}
-        stroke={isSelected ? C.borderSelected : hasImage ? "transparent" : C.border}
-        strokeWidth={isSelected ? 2 : 1}
+        stroke={
+          isSelected
+            ? C.borderSelected
+            : hasImage
+            ? "transparent"
+            : isDragOver
+            ? C.dropzoneBorderHover
+            : C.dropzoneBorder
+        }
+        strokeWidth={isSelected ? 2 : 1.5}
+        dash={hasImage ? undefined : [6, 4]}
         strokeScaleEnabled={false}
         shadowColor={C.shadow}
         shadowBlur={hasImage ? 20 : 0}
@@ -303,140 +392,195 @@ function ImageCard({
         />
       )}
 
-      {/* ── Drop zone (HTML-overlay когда нет картинки) ── */}
+      {/* ── Дропзона (чистый Konva, без Html) ── */}
+      {!hasImage && (
+        <Group
+          listening={listening}
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onClick={handleDropzoneClick}
+        >
+          {/* Иконка изображения */}
+          <Group x={iconX} y={iconY} listening={false}>
+            {/* rect */}
+            <Rect
+              x={4 / 36 * iconSize}
+              y={8 / 36 * iconSize}
+              width={28 / 36 * iconSize}
+              height={20 / 36 * iconSize}
+              cornerRadius={3}
+              stroke={isDragOver ? "rgba(87,193,255,0.7)" : DROPZONE_ICON_COLOR}
+              strokeWidth={1.5}
+              fill="transparent"
+              listening={false}
+            />
+            {/* circle (солнце) — рисуем как маленький круг */}
+            <Rect
+              x={7.5 / 36 * iconSize}
+              y={11.5 / 36 * iconSize}
+              width={5 / 36 * iconSize}
+              height={5 / 36 * iconSize}
+              cornerRadius={999}
+              stroke={isDragOver ? "rgba(87,193,255,0.7)" : DROPZONE_ICON_COLOR}
+              strokeWidth={1.5}
+              fill="transparent"
+              listening={false}
+            />
+            {/* горы (линия) */}
+            <Line
+              points={[
+                4 / 36 * iconSize, 27 / 36 * iconSize,
+                11 / 36 * iconSize, 17 / 36 * iconSize,
+                17 / 36 * iconSize, 23 / 36 * iconSize,
+                22 / 36 * iconSize, 18 / 36 * iconSize,
+                32 / 36 * iconSize, 27 / 36 * iconSize,
+              ]}
+              stroke={isDragOver ? "rgba(87,193,255,0.7)" : DROPZONE_ICON_COLOR}
+              strokeWidth={1.5}
+              lineCap="round"
+              lineJoin="round"
+              listening={false}
+            />
+          </Group>
+
+          {/* Текст "Перетащи или" */}
+          <Text
+            x={object.x}
+            y={textY}
+            width={object.width}
+            text={isDragOver ? "Отпусти для вставки" : "Перетащи или"}
+            fontSize={12}
+            fontFamily="system-ui, sans-serif"
+            fill={DROPZONE_TEXT_COLOR}
+            align="center"
+            listening={false}
+          />
+
+          {/* Ссылка "выбери файл" */}
+          {!isDragOver && (
+            <Text
+              x={object.x}
+              y={linkY}
+              width={object.width}
+              text="выбери файл"
+              fontSize={12}
+              fontFamily="system-ui, sans-serif"
+              fill={DROPZONE_LINK_COLOR}
+              align="center"
+              listening={false}
+            />
+          )}
+        </Group>
+      )}
+
+      {/* ── Drag-over overlay (подсветка при перетаскивании файла в браузер) ── */}
       {!hasImage && (
         <Html
-          groupProps={{
-            x: object.x,
-            y: object.y,
-            listening: true,
-          }}
-          divProps={{ style: { pointerEvents: "auto" } }}
+          groupProps={{ x: object.x, y: object.y, listening: false }}
+          divProps={{ style: { pointerEvents: "none", zIndex: 0 } }}
         >
           <div
-            onPointerDown={handleHtmlPointerDown}
-            onPointerMove={handleHtmlPointerMove}
-            onPointerUp={handleHtmlPointerUp}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isDraggingRef.current) return;
-              onSelect(object.id, e.shiftKey);
+            style={{
+              width: object.width,
+              height: object.height,
+              position: "absolute",
+              top: 0,
+              left: 0,
+              background: "transparent",
+              pointerEvents: isDragOver ? "auto" : "none",
             }}
-            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-            onDragLeave={() => setIsDragOver(false)}
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setIsDragOver(false);
+            }}
             onDrop={(e) => {
               e.preventDefault();
               setIsDragOver(false);
               const file = e.dataTransfer.files[0];
               if (file) loadImageFile(file);
             }}
-            style={{
-              width: object.width,
-              height: object.height,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              borderRadius: 10,
-              border: `1.5px dashed ${isDragOver ? C.dropzoneBorderHover : C.dropzoneBorder}`,
-              background: isDragOver ? C.dropzoneHover : "transparent",
-              boxSizing: "border-box",
-              cursor: "default",
-              transition: "border-color 0.15s, background 0.15s",
-              userSelect: "none",
-            }}
-          >
-            {/* Иконка */}
-            <div style={{ color: isDragOver ? "rgba(87,193,255,0.7)" : "rgba(255,255,255,0.18)", transition: "color 0.15s" }}>
-              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                <rect x="4" y="8" width="28" height="20" rx="3" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="16" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M4 24L11 17L17 23L22 18L32 27" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-
-            {/* Текст */}
-            <div style={{
-              textAlign: "center",
-              fontFamily: "system-ui, sans-serif",
-              pointerEvents: "none",
-            }}>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
-                {isDragOver ? "Отпусти для вставки" : "Перетащи или"}
-              </div>
-              {!isDragOver && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "rgba(87,193,255,0.7)",
-                    cursor: "pointer",
-                    pointerEvents: "auto",
-                    textDecoration: "underline",
-                    textDecorationColor: "rgba(87,193,255,0.35)",
-                    textUnderlineOffset: 2,
-                    marginTop: 2,
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fileInputRef.current?.click();
-                  }}
-                >
-                  выбери файл
-                </div>
-              )}
-            </div>
-
-            {/* Скрытый input[type=file] */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) loadImageFile(file);
-                e.target.value = "";
-              }}
-            />
-          </div>
+          />
         </Html>
       )}
 
-      {/* ── Кармашек (caption tab) ── */}
+      {/* ── Кармашек (caption tab) — чистый Konva, без Html ── */}
       {hasCaption && (
-        <Html
-          groupProps={{
-            x: tabX,
-            y: tabY,
-            listening: true,
-          }}
-          divProps={{ style: { pointerEvents: "auto" } }}
-        >
-          <div
-            onPointerDown={handleHtmlPointerDown}
-            onPointerMove={handleHtmlPointerMove}
-            onPointerUp={handleHtmlPointerUp}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              height: TAB_HEIGHT,
-              maxWidth: object.width - 16,
-              minWidth: TAB_MIN_WIDTH,
-              background: C.tabBg,
-              border: `1px solid ${C.tabBorder}`,
-              borderBottom: "none",
-              borderRadius: `${TAB_CORNER}px ${TAB_CORNER}px 0 0`,
-              padding: `0 6px 0 ${TAB_PADDING_H}px`,
-              boxSizing: "border-box",
-              boxShadow: "0 -4px 12px rgba(0,0,0,0.3)",
-              userSelect: "none",
-              cursor: "default",
+        <>
+          {/* Фон кармашка */}
+          <Rect
+            x={tabX}
+            y={tabY}
+            width={tabWidth}
+            height={TAB_HEIGHT}
+            fill={C.tabBg}
+            cornerRadius={[TAB_CORNER, TAB_CORNER, 0, 0]}
+            stroke={C.tabBorder}
+            strokeWidth={1}
+            strokeScaleEnabled={false}
+            shadowColor="rgba(0,0,0,0.3)"
+            shadowBlur={12}
+            shadowOffsetY={-4}
+            listening={listening}
+            onMouseDown={handlePointerDown}
+            onMouseMove={handlePointerMove}
+            onMouseUp={handlePointerUp}
+            onClick={(e) => {
+              e.cancelBubble = true;
+              if (isDraggingRef.current) return;
+              onSelect(object.id, e.evt.shiftKey);
             }}
-          >
-            {/* Текст / инпут */}
-            {editingCaption ? (
+            onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
+            onDragEnd={handleDragEnd}
+          />
+
+          {/* Текст кармашка */}
+          {!editingCaption && (
+            <Text
+              x={tabX + TAB_PADDING_H}
+              y={tabY + (TAB_HEIGHT - TAB_FONT_SIZE) / 2}
+              width={tabWidth - TAB_PADDING_H - 22} // 22 = место для крестика
+              height={TAB_FONT_SIZE + 4}
+              text={caption || "Название..."}
+              fontSize={TAB_FONT_SIZE}
+              fontFamily="system-ui, sans-serif"
+              fill={caption ? C.tabText : C.tabPlaceholder}
+              ellipsis
+              wrap="none"
+              listening={listening}
+              onDblClick={(e) => {
+                e.cancelBubble = true;
+                setEditingCaption(true);
+              }}
+            />
+          )}
+
+          {/* Крестик — удалить кармашек */}
+          <Text
+            x={tabX + tabWidth - 20}
+            y={tabY + (TAB_HEIGHT - 14) / 2}
+            width={14}
+            height={14}
+            text="✕"
+            fontSize={10}
+            fontFamily="system-ui, sans-serif"
+            fill="rgba(255,255,255,0.25)"
+            align="center"
+            listening={listening}
+            onClick={(e) => {
+              e.cancelBubble = true;
+              onUpdateObject?.(object.id, { caption: undefined });
+            }}
+          />
+
+          {/* HTML инпут для редактирования caption — остаётся Html, но только когда активен */}
+          {editingCaption && (
+            <Html
+              groupProps={{ x: tabX + TAB_PADDING_H, y: tabY + (TAB_HEIGHT - 18) / 2, listening: false }}
+              divProps={{ style: { pointerEvents: "auto" } }}
+            >
               <input
                 ref={captionInputRef}
                 value={caption}
@@ -448,8 +592,7 @@ function ImageCard({
                 onBlur={() => setEditingCaption(false)}
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
-                  flex: 1,
-                  minWidth: 40,
+                  width: tabWidth - TAB_PADDING_H - 22,
                   background: "transparent",
                   border: "none",
                   outline: "none",
@@ -460,61 +603,9 @@ function ImageCard({
                   caretColor: "#4da3ff",
                 }}
               />
-            ) : (
-              <span
-                onClick={(e) => { e.stopPropagation(); if (!isDraggingRef.current) setEditingCaption(true); }}
-                style={{
-                  flex: 1,
-                  fontSize: TAB_FONT_SIZE,
-                  fontFamily: "system-ui, sans-serif",
-                  color: caption ? C.tabText : C.tabPlaceholder,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  cursor: "text",
-                  minWidth: 40,
-                }}
-              >
-                {caption || "Название..."}
-              </span>
-            )}
-
-            {/* Крестик */}
-            <div
-              onClick={(e) => {
-                e.stopPropagation();
-                // Удаляем кармашек: caption становится undefined
-                onUpdateObject?.(object.id, { caption: undefined });
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              title="Убрать название"
-              style={{
-                width: 16,
-                height: 16,
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 4,
-                color: "rgba(255,255,255,0.25)",
-                cursor: "pointer",
-                transition: "color 0.1s, background 0.1s",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "rgba(255,100,100,0.8)";
-                (e.currentTarget as HTMLElement).style.background = "rgba(255,100,100,0.1)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.25)";
-                (e.currentTarget as HTMLElement).style.background = "transparent";
-              }}
-            >
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                <path d="M1 1L7 7M7 1L1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </div>
-          </div>
-        </Html>
+            </Html>
+          )}
+        </>
       )}
 
       {/* ── Transformer ── */}
@@ -522,7 +613,7 @@ function ImageCard({
         <Transformer
           ref={transformerRef}
           rotateEnabled={false}
-          keepRatio={true} // по умолчанию пропорционально
+          keepRatio={true}
           borderStroke="#3a3a42"
           borderStrokeWidth={0}
           anchorStroke={C.anchorStroke}
@@ -533,10 +624,9 @@ function ImageCard({
           ignoreStroke={true}
           boundBoxFunc={(oldBox, newBox) => {
             if (newBox.width < 80 || newBox.height < 60) return oldBox;
-            // Непропорциональный ресайз только с Shift
-            if (!isShiftRef.current) {
+            // Shift = пропорционально, без Shift = свободно
+            if (isShiftRef.current) {
               const aspect = oldBox.width / oldBox.height;
-              // Определяем ведущую ось
               const dw = Math.abs(newBox.width - oldBox.width);
               const dh = Math.abs(newBox.height - oldBox.height);
               if (dw >= dh) {
