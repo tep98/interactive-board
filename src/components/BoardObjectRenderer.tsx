@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { BoardObject, TaskItem } from "../types/board";
 import TextCard from "./TextCard";
 import TasksCard from "./TasksCard";
+import ImageCard from "./ImageCard";
 
 type Props = {
   object: BoardObject;
@@ -28,6 +29,8 @@ function BoardObjectRenderer(props: Props) {
       return <TextCard {...props} />;
     case "tasks":
       return <TasksCard {...props} />;
+    case "image":
+      return <ImageCard {...props} />;
     default:
       return null;
   }

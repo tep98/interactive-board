@@ -39,6 +39,19 @@ const OPTIONS: CardOption[] = [
       </svg>
     ),
   },
+  {
+    type: "image",
+    label: "Изображение",
+    description: "Картинка из файла или буфера",
+    shortcut: "I",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <rect x="2" y="4" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+        <circle cx="6.5" cy="8" r="1.5" fill="currentColor" opacity="0.7" />
+        <path d="M2 13L6 9L9.5 12.5L12 10L16 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+      </svg>
+    ),
+  },
 ];
 
 type Props = {
@@ -85,7 +98,6 @@ export default function CardPickerMenu({ position, onSelect, onClose }: Props) {
 
   if (!position) return null;
 
-  // Чтобы меню не выходило за правый/нижний край
   const menuW = 240;
   const menuH = OPTIONS.length * 60 + 16;
   const left = Math.min(position.x, window.innerWidth - menuW - 8);

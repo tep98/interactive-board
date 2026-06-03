@@ -4,7 +4,6 @@ import BoardCanvas from "./components/BoardCanvas";
 import CardPickerMenu from "./components/CardPickerMenu";
 import type { BoardObject, CardType, InteractionMode, TaskItem } from "./types/board";
 
-// Позиция меню: null — скрыто, {x,y} — у курсора или у кнопки
 type MenuPosition = { x: number; y: number } | null;
 
 function App() {
@@ -16,9 +15,7 @@ function App() {
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Позиция меню выбора типа карточки
   const [menuPosition, setMenuPosition] = useState<MenuPosition>(null);
-  // Позиция в мировых координатах куда создавать карточку (для горячей клавиши)
   const pendingCreatePos = useRef<{ x: number; y: number } | null>(null);
 
   const [objects, setObjects] = useState<BoardObject[]>([
@@ -38,7 +35,7 @@ function App() {
   // ── Создание карточки ────────────────────────────────────────────────────────
   function createCard(x: number, y: number, type: CardType) {
     const width = 220;
-    const height = type === "tasks" ? 260 : 200;
+    const height = type === "tasks" ? 260 : type === "image" ? 220 : 200;
 
     const newCard: BoardObject = {
       id: crypto.randomUUID(),
@@ -52,9 +49,9 @@ function App() {
     };
 
     setObjects((prev) => [...prev, newCard]);
+    return newCard.id;
   }
 
-  // Вызывается из CardPickerMenu: создаём там, где стоял курсор (или центр экрана)
   function handleMenuSelect(type: CardType) {
     setMenuPosition(null);
 
@@ -62,7 +59,6 @@ function App() {
     if (pos) {
       createCard(pos.x, pos.y, type);
     } else {
-      // Создаём по центру экрана (клик по кнопке)
       const centerX = (window.innerWidth / 2 - camera.x) / camera.zoom;
       const centerY = (window.innerHeight / 2 - camera.y) / camera.zoom;
       createCard(centerX, centerY, type);
@@ -71,20 +67,71 @@ function App() {
   }
 
   useEffect(() => {
-    const preventZoom = (e) => {
-      if (e.ctrlKey) {
-        e.preventDefault();
-      }
+    const preventZoom = (e: WheelEvent) => {
+      if (e.ctrlKey) e.preventDefault();
     };
-
     window.addEventListener("wheel", preventZoom, { passive: false });
-
-    return () => {
-      window.removeEventListener("wheel", preventZoom);
-    };
+    return () => window.removeEventListener("wheel", preventZoom);
   }, []);
 
-  // ── Хоткей A — открыть меню у курсора ───────────────────────────────────────
+  // ── Глобальная вставка картинки из буфера обмена ─────────────────────────────
+  // Если ни одна image-карточка не выделена — создаём новую по центру экрана
+  useEffect(() => {
+    async function handlePaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          // Если выделена image-карточка — она сама обрабатывает paste
+          const selectedImageCard = objects.find(
+            (o) => selectedIds.includes(o.id) && o.type === "image"
+          );
+          if (selectedImageCard) return; // пусть ImageCard сам обработает
+
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const src = ev.target?.result as string;
+            if (!src) return;
+            const img = new window.Image();
+            img.src = src;
+            img.onload = () => {
+              const centerX = (window.innerWidth / 2 - camera.x) / camera.zoom;
+              const centerY = (window.innerHeight / 2 - camera.y) / camera.zoom;
+              const maxW = 400;
+              const aspect = img.naturalWidth / img.naturalHeight;
+              const width = Math.min(maxW, img.naturalWidth);
+              const height = Math.round(width / aspect);
+
+              const newCard: BoardObject = {
+                id: crypto.randomUUID(),
+                type: "image",
+                x: centerX - width / 2,
+                y: centerY - height / 2,
+                width,
+                height,
+                color: "",
+                imageSrc: src,
+              };
+              setObjects((prev) => [...prev, newCard]);
+              setSelectedIds([newCard.id]);
+            };
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    }
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [camera, objects, selectedIds]);
+
+  // ── Хоткеи ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey && e.code === "KeyA") {
@@ -93,18 +140,17 @@ function App() {
         return;
       }
 
+      // A — открыть меню у курсора
       if (e.code === "KeyA" && !e.repeat && !e.ctrlKey) {
         const pointer = pointerRef.current;
         if (!isPointerInside || !pointer) return;
-
         const worldX = (pointer.x - camera.x) / camera.zoom;
         const worldY = (pointer.y - camera.y) / camera.zoom;
-
         pendingCreatePos.current = { x: worldX, y: worldY };
         setMenuPosition({ x: pointer.x + 8, y: pointer.y + 8 });
       }
 
-      // T — быстро создать текстовую карточку
+      // T — текстовая карточка
       if (e.code === "KeyT" && !e.repeat && !e.ctrlKey && !e.shiftKey) {
         const pointer = pointerRef.current;
         if (!isPointerInside || !pointer) return;
@@ -113,13 +159,22 @@ function App() {
         createCard(worldX, worldY, "text");
       }
 
-      // L — быстро создать карточку-список
+      // L — список задач
       if (e.code === "KeyL" && !e.repeat && !e.ctrlKey && !e.shiftKey) {
         const pointer = pointerRef.current;
         if (!isPointerInside || !pointer) return;
         const worldX = (pointer.x - camera.x) / camera.zoom;
         const worldY = (pointer.y - camera.y) / camera.zoom;
         createCard(worldX, worldY, "tasks");
+      }
+
+      // I — карточка с изображением
+      if (e.code === "KeyI" && !e.repeat && !e.ctrlKey && !e.shiftKey) {
+        const pointer = pointerRef.current;
+        if (!isPointerInside || !pointer) return;
+        const worldX = (pointer.x - camera.x) / camera.zoom;
+        const worldY = (pointer.y - camera.y) / camera.zoom;
+        createCard(worldX, worldY, "image");
       }
     }
 
@@ -153,7 +208,7 @@ function App() {
         setSelectedIds([]);
       }
 
-      if (e.ctrlKey && e.code === "KeyD" || e.shiftKey && e.code === "KeyD") {
+      if ((e.ctrlKey && e.code === "KeyD") || (e.shiftKey && e.code === "KeyD")) {
         e.preventDefault();
         const selected = objects.filter((o) => selectedIds.includes(o.id));
         if (selected.length === 0) return;
@@ -178,14 +233,18 @@ function App() {
       }
 
       if (e.ctrlKey && e.code === "KeyV") {
-        const pasted = clipboardRef.current.map((o) => ({
-          ...o,
-          id: crypto.randomUUID(),
-          x: o.x + offset,
-          y: o.y + offset,
-        }));
-        setObjects((prev) => [...prev, ...pasted]);
-        setSelectedIds(pasted.map((o) => o.id));
+        // Если в буфере есть карточки — вставляем их
+        if (clipboardRef.current.length > 0) {
+          const pasted = clipboardRef.current.map((o) => ({
+            ...o,
+            id: crypto.randomUUID(),
+            x: o.x + offset,
+            y: o.y + offset,
+          }));
+          setObjects((prev) => [...prev, ...pasted]);
+          setSelectedIds(pasted.map((o) => o.id));
+        }
+        // Paste картинки обрабатывается отдельным useEffect выше
       }
     }
 
@@ -193,21 +252,21 @@ function App() {
     return () => window.removeEventListener("keydown", handleDelete);
   }, [selectedIds, objects]);
 
-  // ── Tasks update ─────────────────────────────────────────────────────────────
+  // ── Tasks update ──────────────────────────────────────────────────────────────
   function handleUpdateTasks(id: string, tasks: TaskItem[]) {
     setObjects((prev) =>
       prev.map((o) => (o.id === id ? { ...o, tasks } : o))
     );
   }
 
-  // ── Object patch (для checkboxMode, tasksLocked и т.д.) ──────────────────────
+  // ── Object patch ──────────────────────────────────────────────────────────────
   function handleUpdateObject(id: string, patch: Partial<BoardObject>) {
     setObjects((prev) =>
       prev.map((o) => (o.id === id ? { ...o, ...patch } : o))
     );
   }
 
-  // ── Кнопка + ────────────────────────────────────────────────────────────────
+  // ── Кнопка + ─────────────────────────────────────────────────────────────────
   function handleAddButtonClick() {
     pendingCreatePos.current = null;
     if (menuPosition) {
@@ -221,6 +280,15 @@ function App() {
     }
   }
 
+  // ── Кнопка «Добавить название» для выделенной image-карточки ─────────────────
+  const selectedImageCard =
+    selectedIds.length === 1
+      ? objects.find((o) => o.id === selectedIds[0] && o.type === "image")
+      : undefined;
+
+  const showCaptionButton =
+    selectedImageCard && selectedImageCard.caption === undefined;
+
   return (
     <div>
       {/* ── Тулбар ── */}
@@ -230,6 +298,8 @@ function App() {
           top: 10,
           left: 10,
           zIndex: 10,
+          display: "flex",
+          gap: 6,
         }}
       >
         <button
@@ -255,7 +325,44 @@ function App() {
         >
           +
         </button>
+
+        {/* Кнопка добавления кармашка с названием */}
+        {showCaptionButton && (
+          <button
+            onClick={() => handleUpdateObject(selectedImageCard!.id, { caption: "" })}
+            title="Добавить название к изображению"
+            style={{
+              height: 34,
+              padding: "0 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              fontFamily: "system-ui, sans-serif",
+              borderRadius: 8,
+              background: "#1a1a1a",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#e0e0e8",
+              cursor: "pointer",
+              transition: "background 0.12s",
+              animation: "fadeIn 0.15s ease-out",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <rect x="1" y="1" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M3 10H9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+            Название
+          </button>
+        )}
       </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
 
       <BoardCanvas
         objects={objects}
@@ -274,7 +381,6 @@ function App() {
         onUpdateObject={handleUpdateObject}
       />
 
-      {/* ── Меню выбора типа карточки ── */}
       <CardPickerMenu
         position={menuPosition}
         onSelect={handleMenuSelect}

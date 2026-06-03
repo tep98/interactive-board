@@ -24,6 +24,9 @@ export type BoardObject = {
   checkboxMode?: boolean;
   // true = чекбоксы заблокированы (нельзя менять состояние)
   tasksLocked?: boolean;
+  // Контент карточки-изображения
+  imageSrc?: string;          // base64 data URL
+  caption?: string;           // undefined = кармашек скрыт, string = виден (может быть пустой)
 };
 
 export type Camera = {
