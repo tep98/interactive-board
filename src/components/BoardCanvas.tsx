@@ -22,6 +22,7 @@ type Props = {
   setSelectedIds: (ids: string[] | ((prev: string[]) => string[])) => void;
   onUpdateTasks?: (id: string, tasks: TaskItem[]) => void;
   onUpdateObject?: (id: string, patch: Partial<BoardObject>) => void;
+  onContextMenu?: (screenX: number, screenY: number, worldX: number, worldY: number) => void;
 };
 
 export default function BoardCanvas({
@@ -39,6 +40,7 @@ export default function BoardCanvas({
   setSelectedIds,
   onUpdateTasks,
   onUpdateObject,
+  onContextMenu,
 }: Props) {
   const stageRef = useRef(null);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
@@ -277,6 +279,15 @@ export default function BoardCanvas({
             y: pointer.y - mousePointTo.y * clampedZoom,
             zoom: clampedZoom,
           });
+        }}
+        onContextMenu={(e) => {
+          e.evt.preventDefault();
+          const stage = stageRef.current as any;
+          const pointer = stage?.getPointerPosition();
+          if (!pointer || !onContextMenu) return;
+          const worldX = (pointer.x - camera.x) / camera.zoom;
+          const worldY = (pointer.y - camera.y) / camera.zoom;
+          onContextMenu(pointer.x, pointer.y, worldX, worldY);
         }}
       >
         <Layer x={camera.x} y={camera.y} scaleX={camera.zoom} scaleY={camera.zoom}>

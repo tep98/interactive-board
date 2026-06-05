@@ -379,6 +379,10 @@ function App() {
         setSelectedIds={setSelectedIds}
         onUpdateTasks={handleUpdateTasks}
         onUpdateObject={handleUpdateObject}
+        onContextMenu={(screenX, screenY, worldX, worldY) => {
+          pendingCreatePos.current = { x: worldX, y: worldY };
+          setMenuPosition({ x: screenX, y: screenY });
+        }}
       />
 
       <CardPickerMenu
