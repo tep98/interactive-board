@@ -3,7 +3,7 @@ import type { EditorState } from "../hooks/useTextEditor";
 
 type Props = {
   editor: EditorState;
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onClose: () => void;
 };

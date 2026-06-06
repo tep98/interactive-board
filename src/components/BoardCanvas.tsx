@@ -1,4 +1,5 @@
 import { Stage, Layer, Rect } from "react-konva";
+import type Konva from "konva";
 import { useRef, useState } from "react";
 import BoardObjectRenderer from "./BoardObjectRenderer";
 import FloatingEditor from "./FloatingEditor";
@@ -33,7 +34,6 @@ export default function BoardCanvas({
   mode,
   setMode,
   isSpacePressed,
-  isPointerInside,
   setIsPointerInside,
   pointerRef,
   selectedIds,
@@ -42,7 +42,8 @@ export default function BoardCanvas({
   onUpdateObject,
   onContextMenu,
 }: Props) {
-  const stageRef = useRef(null);
+  // Типизируем ref как Konva.Stage чтобы getPointerPosition был доступен
+  const stageRef = useRef<Konva.Stage>(null);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -95,37 +96,22 @@ export default function BoardCanvas({
     });
   }
 
-  function handleSelect(
-    id: string,
-    shift: boolean
-  ) {
-    setObjects(prev => {
-      const target =
-        prev.find(o => o.id === id);
-
+  function handleSelect(id: string, shift: boolean) {
+    setObjects((prev) => {
+      const target = prev.find((o) => o.id === id);
       if (!target) return prev;
-
-      const without =
-        prev.filter(o => o.id !== id);
-
-      return [
-        ...without,
-        target
-      ];
+      const without = prev.filter((o) => o.id !== id);
+      return [...without, target];
     });
 
     if (shift) {
-      setSelectedIds(prev =>
-        prev.includes(id)
-          ? prev.filter(x => x !== id)
-          : [...prev, id]
+      setSelectedIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
       );
-
     } else {
       setSelectedIds([id]);
     }
   }
-  
 
   function screenToWorld(pointer: { x: number; y: number }) {
     return {
@@ -188,8 +174,7 @@ export default function BoardCanvas({
             return;
           }
 
-          const stage = stageRef.current;
-          const pointer = stage?.getPointerPosition();
+          const pointer = stageRef.current?.getPointerPosition();
           if (!pointer) return;
 
           const middleMouseButton = e.evt.button === 1;
@@ -238,8 +223,7 @@ export default function BoardCanvas({
           }
         }}
         onMouseMove={() => {
-          const stage = stageRef.current;
-          const pointer = stage?.getPointerPosition();
+          const pointer = stageRef.current?.getPointerPosition();
           if (!pointer) return;
           pointerRef.current = pointer;
 
@@ -259,8 +243,7 @@ export default function BoardCanvas({
           lastPointerRef.current = pointer;
         }}
         onWheel={(e) => {
-          const stage = stageRef.current;
-          const pointer = stage?.getPointerPosition();
+          const pointer = stageRef.current?.getPointerPosition();
           if (!pointer) return;
 
           const scaleBy = 1.1;
@@ -282,8 +265,7 @@ export default function BoardCanvas({
         }}
         onContextMenu={(e) => {
           e.evt.preventDefault();
-          const stage = stageRef.current as any;
-          const pointer = stage?.getPointerPosition();
+          const pointer = stageRef.current?.getPointerPosition();
           if (!pointer || !onContextMenu) return;
           const worldX = (pointer.x - camera.x) / camera.zoom;
           const worldY = (pointer.y - camera.y) / camera.zoom;
@@ -332,7 +314,7 @@ export default function BoardCanvas({
       {editor && (
         <FloatingEditor
           editor={editor}
-          textareaRef={textareaRef}
+          textareaRef={textareaRef as React.RefObject<HTMLTextAreaElement>}
           onChange={handleChange}
           onClose={closeEditor}
         />

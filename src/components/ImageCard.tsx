@@ -66,7 +66,7 @@ function ImageCard({
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const nodeStartRef = useRef<{ x: number; y: number } | null>(null);
   const isShiftRef = useRef(false);
-  const [isHovered, setIsHovered] = useState(false);
+  
   const [isDragOver, setIsDragOver] = useState(false);
   const [konvaImage, setKonvaImage] = useState<HTMLImageElement | null>(null);
   const [editingCaption, setEditingCaption] = useState(false);
@@ -219,34 +219,8 @@ function ImageCard({
   // ── Drag через HTML (дропзона, кармашек) ─────────────────────────────────────
   // ИСПРАВЛЕНИЕ: при startDrag из HTML мышь уже не в "центре" узла —
   // нужно явно восстанавливать позицию узла, чтобы не было прыжка.
-  function handleHtmlPointerDown(e: React.PointerEvent) {
-    e.stopPropagation();
-    pointerStartRef.current = { x: e.clientX, y: e.clientY };
-    if (shapeRef.current) {
-      nodeStartRef.current = { x: shapeRef.current.x(), y: shapeRef.current.y() };
-    }
-    isDraggingRef.current = false;
-  }
 
-  function handleHtmlPointerMove(e: React.PointerEvent) {
-    if (!pointerStartRef.current || !nodeStartRef.current) return;
-    const dx = e.clientX - pointerStartRef.current.x;
-    const dy = e.clientY - pointerStartRef.current.y;
-    if (Math.sqrt(dx * dx + dy * dy) > 4) {
-      isDraggingRef.current = true;
-      if (draggable && shapeRef.current && !shapeRef.current.isDragging()) {
-        // Восстанавливаем исходную позицию перед startDrag чтобы не было прыжка
-        shapeRef.current.x(nodeStartRef.current.x);
-        shapeRef.current.y(nodeStartRef.current.y);
-        shapeRef.current.startDrag({ evt: e.nativeEvent });
-      }
-    }
-  }
 
-  function handleHtmlPointerUp() {
-    pointerStartRef.current = null;
-    nodeStartRef.current = null;
-  }
 
   function handleDragStart(e: any) {
     isDraggingRef.current = true;
@@ -366,8 +340,6 @@ function ImageCard({
         shadowOpacity={0.6}
         draggable={draggable}
         listening={listening}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         onMouseDown={handlePointerDown}
         onMouseMove={handlePointerMove}
         onMouseUp={handlePointerUp}
