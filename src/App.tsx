@@ -359,6 +359,13 @@ function App() {
   // Имя файла для отображения в тулбаре
   const fileName = currentPath ? currentPath.split(/[\\/]/).pop() : null;
 
+  // Кнопка «Добавить название» — показывается когда выбрана одна image-карточка без caption
+  const selectedImageCard =
+    selectedIds.length === 1
+      ? objects.find((o) => o.id === selectedIds[0] && o.type === "image")
+      : undefined;
+  const showCaptionButton = selectedImageCard && selectedImageCard.caption === undefined;
+
   return (
     <div>
       {/* ── Тулбар ── */}
@@ -377,6 +384,14 @@ function App() {
             border: "1px solid rgba(255,255,255,0.12)",
             color: "#e0e0e8", cursor: "pointer",
             transition: "background 0.12s",
+          }}
+          onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "#202020";
+                (e.currentTarget as HTMLElement).style.color = "rgb(255, 255, 255)";
+              }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "#1a1a1a";
+            (e.currentTarget as HTMLElement).style.color = "#e0e0e8";
           }}
         >
           +
@@ -468,6 +483,47 @@ function App() {
           }}>
             {fileName}{isDirty ? " •" : ""}
           </div>
+        )}
+
+        {/* Кнопка добавления подписи к image-карточке */}
+        {showCaptionButton && (
+          <>
+            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+            <button
+              onClick={() => handleUpdateObject(selectedImageCard!.id, { caption: "" })}
+              title="Добавить название к изображению"
+              style={{
+                height: 30,
+                padding: "0 10px",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 12,
+                fontFamily: "system-ui, sans-serif",
+                borderRadius: 7,
+                background: "#1a1a1a",
+                border: "1px solid transparent",
+                color: "#e0e0e8",
+                cursor: "pointer",
+                transition: "background 0.12s, color 0.12s",
+                animation: "fadeIn 0.15s ease-out",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "#202020";
+                (e.currentTarget as HTMLElement).style.color = "rgb(255, 255, 255)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "#1a1a1a";
+                (e.currentTarget as HTMLElement).style.color = "#e0e0e8";
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <rect x="1" y="1" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M3 10H9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              Название
+            </button>
+          </>
         )}
       </div>
 
