@@ -25,6 +25,7 @@ function App() {
 
   const [menuPosition, setMenuPosition] = useState<MenuPosition>(null);
   const pendingCreatePos = useRef<{ x: number; y: number } | null>(null);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
 
   const [objects, setObjects] = useState<BoardObject[]>(DEFAULT_OBJECTS);
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
@@ -366,129 +367,182 @@ function App() {
       : undefined;
   const showCaptionButton = selectedImageCard && selectedImageCard.caption === undefined;
 
+  // Пропсы файловых операций для CardPickerMenu
+  const fileActions = {
+    onNew: async () => {
+      if (isDirty) {
+        const result = await openCloseDialog();
+        if (result === "cancel") return;
+        if (result === "save") {
+          const saved = await saveProject(objects, camera);
+          if (!saved) return;
+        }
+      }
+      newProject();
+      setObjects([]);
+      setCamera({ x: 0, y: 0, zoom: 1 });
+      setSelectedIds([]);
+    },
+    onOpen: async () => {
+      const data = await openProject();
+      if (data) { setObjects(data.objects); setCamera(data.camera); setSelectedIds([]); }
+    },
+    onSave: () => saveProject(objects, camera),
+    onSaveAs: () => saveAs(objects, camera),
+    isDirty,
+    fileName,
+  };
+
   return (
     <div>
       {/* ── Тулбар ── */}
       <div style={{ position: "absolute", top: 10, left: 10, zIndex: 10, display: "flex", gap: 6, alignItems: "center" }}>
 
-        {/* Кнопка добавить карточку */}
+        {/* "+" — открывает CardPickerMenu */}
         <button
           ref={addButtonRef}
           onClick={handleAddButtonClick}
           title="Добавить карточку (A)"
           style={{
-            width: 34, height: 34, padding: 0,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 22, lineHeight: 1, borderRadius: 8,
+            width: 34,
+            height: 34,
+            padding: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 8,
             background: menuPosition !== null ? "rgba(255,255,255,0.1)" : "#1a1a1a",
-            border: "1px solid rgba(255,255,255,0.12)",
-            color: "#e0e0e8", cursor: "pointer",
+            border: "1px solid rgba(255, 255, 255, 0)",
+            color: "#e0e0e8",
+            cursor: "pointer",
             transition: "background 0.12s",
+            outline: "none",
           }}
+
           onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background = "#202020";
-                (e.currentTarget as HTMLElement).style.color = "rgb(255, 255, 255)";
-              }}
+            (e.currentTarget as HTMLElement).style.background = "#202020";
+            (e.currentTarget as HTMLElement).style.color = "rgb(255, 255, 255)";
+          }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLElement).style.background = "#1a1a1a";
             (e.currentTarget as HTMLElement).style.color = "#e0e0e8";
           }}
         >
-          +
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            style={{ display: "block" }}
+          >
+            <path
+              d="M12 5V19M5 12H19"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+          </svg>
         </button>
 
-        {/* Разделитель */}
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+        {/* "..." — разворачивает файловые операции */}
+        <button
+          onClick={() => setFileMenuOpen((v) => !v)}
+          title="Параметры проекта"
+          style={{
+            width: 34, height: 34, padding: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 8,
+            background: fileMenuOpen ? "rgba(255,255,255,0.1)" : "#1a1a1a",
+            border: "1px solid rgba(255, 255, 255, 0)",
+            color: "#e0e0e8", cursor: "pointer",
+            transition: "background 0.12s",
+            position: "relative",
+            outline: "none",
+          }}
 
-        {/* Новый проект */}
-        <ToolbarButton
-          title="Новый проект (Ctrl+N)"
-          onClick={async () => {
-            if (isDirty) {
-              const result = await openCloseDialog();
-              if (result === "cancel") return;
-              if (result === "save") {
-                const saved = await saveProject(objects, camera);
-                if (!saved) return;
-              }
-            }
-            newProject();
-            setObjects([]);
-            setCamera({ x: 0, y: 0, zoom: 1 });
-            setSelectedIds([]);
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "#202020";
+            (e.currentTarget as HTMLElement).style.color = "rgb(255, 255, 255)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "#1a1a1a";
+            (e.currentTarget as HTMLElement).style.color = "#e0e0e8";
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="3" y="1" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-            <path d="M9 1L13 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            <path d="M9 1V5H13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M5 14H11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          <svg width="16" height="4" viewBox="0 0 16 4" fill="none">
+            <circle cx="2" cy="2" r="1.5" fill="currentColor"/>
+            <circle cx="8" cy="2" r="1.5" fill="currentColor"/>
+            <circle cx="14" cy="2" r="1.5" fill="currentColor"/>
           </svg>
-        </ToolbarButton>
+          {/* Индикатор несохранённых изменений */}
+          {isDirty && !fileMenuOpen && (
+            <div style={{
+              position: "absolute", top: 7, right: 7,
+              width: 5, height: 5, borderRadius: "50%",
+              background: "#4da3ff", pointerEvents: "none",
+            }} />
+          )}
+        </button>
 
-        {/* Открыть */}
-        <ToolbarButton
-          title="Открыть проект (Ctrl+O)"
-          onClick={async () => {
-            const data = await openProject();
-            if (data) {
-              setObjects(data.objects);
-              setCamera(data.camera);
-              setSelectedIds([]);
-            }
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M2 5C2 4.44772 2.44772 4 3 4H6.38197L7.72361 6H13C13.5523 6 14 6.44772 14 7V12C14 12.5523 13.5523 13 13 13H3C2.44772 13 2 12.5523 2 12V5Z" stroke="currentColor" strokeWidth="1.3"/>
-          </svg>
-        </ToolbarButton>
+        {/* Разворачиваемая панель */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 4,
+          overflow: "hidden",
+          maxWidth: fileMenuOpen ? 300 : 0,
+          opacity: fileMenuOpen ? 1 : 0,
+          transition: "max-width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.18s ease",
+          pointerEvents: fileMenuOpen ? "auto" : "none",
+        }}>
+          <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
 
-        {/* Сохранить */}
-        <ToolbarButton
-          title="Сохранить (Ctrl+S)"
-          onClick={() => saveProject(objects, camera)}
-          active={isDirty}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/>
-            <rect x="5" y="2" width="6" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.3"/>
-            <rect x="4" y="8" width="8" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
-          </svg>
-        </ToolbarButton>
+          <ToolbarButton title="Новый проект (Ctrl+N)" onClick={fileActions.onNew}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="3" y="1" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M9 1L13 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              <path d="M9 1V5H13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5 14H11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+          </ToolbarButton>
 
-        {/* Сохранить как */}
-        <ToolbarButton
-          title="Сохранить как (Ctrl+Shift+S)"
-          onClick={() => saveAs(objects, camera)}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/>
-            <rect x="5" y="2" width="6" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.3"/>
-            <rect x="4" y="8" width="8" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
-            <path d="M10 4.5L12 6.5L10 8.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </ToolbarButton>
+          <ToolbarButton title="Открыть проект (Ctrl+O)" onClick={fileActions.onOpen}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 5C2 4.44772 2.44772 4 3 4H6.38197L7.72361 6H13C13.5523 6 14 6.44772 14 7V12C14 12.5523 13.5523 13 13 13H3C2.44772 13 2 12.5523 2 12V5Z" stroke="currentColor" strokeWidth="1.3"/>
+            </svg>
+          </ToolbarButton>
 
-        {/* Имя файла */}
-        {fileName && (
-          <div style={{
-            fontSize: 11,
-            fontFamily: "system-ui, sans-serif",
-            color: "rgba(255,255,255,0.35)",
-            paddingLeft: 4,
-            maxWidth: 200,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-            {fileName}{isDirty ? " •" : ""}
-          </div>
-        )}
+          <ToolbarButton title="Сохранить (Ctrl+S)" onClick={fileActions.onSave} active={isDirty}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="5" y="2" width="6" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="4" y="8" width="8" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+            </svg>
+          </ToolbarButton>
 
-        {/* Кнопка добавления подписи к image-карточке */}
+          <ToolbarButton title="Сохранить как (Ctrl+Shift+S)" onClick={fileActions.onSaveAs}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="5" y="2" width="6" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.3"/>
+              <rect x="4" y="8" width="8" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M10 4.5L12 6.5L10 8.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </ToolbarButton>
+
+          {fileName && (
+            <div style={{
+              fontSize: 11, fontFamily: "system-ui, sans-serif",
+              color: "rgba(255,255,255,0.35)", paddingLeft: 4,
+              maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis",
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}>
+              {fileName}{isDirty ? " •" : ""}
+            </div>
+          )}
+        </div>
+
+        {/* Кнопка подписи к image-карточке */}
         {showCaptionButton && (
           <>
-            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)", flexShrink: 0  }} />
             <button
               onClick={() => handleUpdateObject(selectedImageCard!.id, { caption: "" })}
               title="Добавить название к изображению"
@@ -562,6 +616,7 @@ function App() {
           setMenuPosition(null);
           pendingCreatePos.current = null;
         }}
+        fileActions={fileActions}
       />
 
       {showCloseDialog && (
