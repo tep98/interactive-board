@@ -20,13 +20,11 @@ export type BoardObject = {
   content?: string;
   // Контент карточки-списка
   tasks?: TaskItem[];
-  // false = обычный список (без чекбоксов), true = с чекбоксами (по умолчанию)
-  checkboxMode?: boolean;
-  // true = чекбоксы заблокированы (нельзя менять состояние)
-  tasksLocked?: boolean;
+  checkboxMode?: boolean; // false = без чекбоксов, true = с чекбоксами (по умолчанию)
+  tasksLocked?: boolean; // true = чекбоксы заблокированы (нельзя менять состояние)
   // Контент карточки-изображения
   imageSrc?: string;          // base64 data URL
-  caption?: string;           // undefined = кармашек скрыт, string = виден (может быть пустой)
+  caption?: string;           // undefined = кармашек скрыт, string = виден
 };
 
 export type Camera = {
