@@ -1,73 +1,315 @@
-# React + TypeScript + Vite
+# Interactive Board
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Десктопное приложение для интерактивных досок — аналог Miro, Milanote и PureRef. Позволяет создавать карточки с текстом, списками задач и изображениями, размещать их на бесконечном холсте и сохранять проекты в файл.
 
-Currently, two official plugins are available:
+Написано на **React + TypeScript**, рендеринг холста через **React-Konva**, упаковано в нативное десктопное приложение через **Tauri 2 + Rust**.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## Содержание
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- [Возможности](#возможности)
+- [Стек технологий](#стек-технологий)
+- [Структура проекта](#структура-проекта)
+- [Требования](#требования)
+- [Установка и запуск](#установка-и-запуск)
+- [Сборка в .exe](#сборка-в-exe)
+- [Горячие клавиши](#горячие-клавиши)
+- [Формат файла проекта](#формат-файла-проекта)
+- [Архитектурные решения](#архитектурные-решения)
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Возможности
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Холст
+- Бесконечный зумируемый холст с точечной сеткой
+- Панорамирование: зажатый `Space` + ЛКМ или средняя кнопка мыши
+- Зум колёсиком с фокусом на курсор (от 20% до 400%)
+- Мультиселект через `Shift` или прямоугольное выделение
+- Групповое перемещение выделенных объектов
+- Динамический Z-order: последняя выбранная карточка оказывается поверх остальных
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Карточки
+Три типа карточек, каждый реализован как независимый компонент:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+**Текстовая карточка** — заголовок и текстовое поле. Клик по области заголовка открывает редактирование заголовка, клик по области текста — редактирование текста. Редактирование реализовано через прозрачный `<textarea>`, наложенный поверх canvas.
+
+**Карточка-список** — заголовок и список задач. Каждая задача имеет чекбокс, текст и кнопку удаления. Поддерживается два режима отображения (с чекбоксами / маркированный список) и блокировка чекбоксов. Всегда есть пустая строка в конце для добавления новой задачи.
+
+**Карточка-изображение** — принимает картинку через drag-and-drop, клик с выбором файла или вставку из буфера обмена (`Ctrl+V`). После загрузки изображение заполняет всю карточку без интерфейсных элементов. Опциональный «кармашек» с названием выступает над карточкой. Пропорциональный ресайз по умолчанию, непропорциональный — с зажатым `Shift`.
+
+### Работа с файлами
+- Сохранение и открытие проектов в формате `.board` (JSON)
+- Диалоговое окно при попытке выйти с несохранёнными изменениями (три варианта: Сохранить / Не сохранять / Отмена)
+- Отображение имени файла и индикатора несохранённых изменений `•` в заголовке окна
+
+---
+
+## Стек технологий
+
+| Слой | Технология |
+|---|---|
+| UI-фреймворк | React 18 + TypeScript |
+| Рендеринг холста | React-Konva (обёртка над Konva.js) |
+| HTML поверх canvas | react-konva-utils (`<Html>`) |
+| Десктоп-оболочка | Tauri 2 |
+| Бэкенд (Rust) | Чтение/запись файлов через `fs`, диалоги через `tauri-plugin-dialog` |
+| Сборщик | Vite |
+| Пакетный менеджер | npm |
+
+---
+
+## Структура проекта
+
+```
+interactive-board/
+├── src/
+│   ├── components/
+│   │   ├── BoardCanvas.tsx        # Stage, Layer, события мыши/колёсика
+│   │   ├── BoardObjectRenderer.tsx # Роутер по типам карточек
+│   │   ├── TextCard.tsx           # Текстовая карточка
+│   │   ├── TasksCard.tsx          # Карточка-список
+│   │   ├── ImageCard.tsx          # Карточка-изображение
+│   │   ├── FloatingEditor.tsx     # Textarea поверх canvas для редактирования
+│   │   ├── CardPickerMenu.tsx     # Меню выбора типа карточки
+│   │   ├── CloseConfirmDialog.tsx # Диалог подтверждения при выходе
+│   │   └── Grid.tsx               # Точечная сетка (Konva Shape)
+│   ├── hooks/
+│   │   ├── useTextEditor.ts       # Хук управления floating textarea
+│   │   ├── useProjectFile.ts      # Хук сохранения/открытия файлов
+│   │   └── useCloseGuard.ts       # Перехват закрытия окна Tauri
+│   ├── types/
+│   │   └── board.ts               # Типы BoardObject, Camera, TaskItem и др.
+│   ├── utils/
+│   │   └── snap.ts                # Привязка координат к сетке
+│   ├── App.tsx                    # Корневой компонент, хоткеи, состояние
+│   └── main.tsx                   # Точка входа React
+│
+└── src-tauri/
+    ├── src/
+    │   ├── main.rs                # Tauri-команды: read_project_file, write_project_file
+    │   └── lib.rs
+    ├── capabilities/
+    │   └── default.json           # Разрешения Tauri (fs, dialog)
+    ├── icons/                     # Иконки приложения
+    ├── Cargo.toml                 # Rust-зависимости
+    ├── build.rs                   # Tauri build script
+    └── tauri.conf.json            # Конфигурация Tauri
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Требования
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Для запуска в режиме разработки и сборки
+
+- **Node.js** 18+ — [nodejs.org](https://nodejs.org)
+- **Rust** (stable) — установить через [rustup.rs](https://rustup.rs)
+- **WebView2** — на Windows 11 уже встроен, на Windows 10 скачать [отсюда](https://developer.microsoft.com/microsoft-edge/webview2/)
+
+Проверить что всё установлено:
+
+```bash
+node --version   # v18.0.0 или выше
+npm --version
+rustc --version  # 1.70.0 или выше
+cargo --version
 ```
+
+---
+
+## Установка и запуск
+
+### 1. Клонировать репозиторий
+
+```bash
+git clone https://github.com/tep98/interactive-board.git
+cd interactive-board
+```
+
+### 2. Установить зависимости
+
+```bash
+npm install
+```
+
+### 3. Запустить в режиме разработки
+
+```bash
+npm run tauri:dev
+```
+
+При первом запуске Cargo скачает и скомпилирует Rust-зависимости — это занимает **5–10 минут**. Последующие запуски — несколько секунд.
+
+Откроется нативное окно приложения с hot-reload для фронтенда.
+
+> **Только фронтенд** (без Tauri API, в браузере):
+> ```bash
+> npm run dev
+> ```
+> Откроется на `http://localhost:5173`. Функции сохранения/открытия файлов в браузере недоступны.
+
+---
+
+## Сборка в .exe
+
+```bash
+npm run tauri:build
+```
+
+Собранный установщик и портативный `.exe` появятся в:
+
+```
+src-tauri/target/release/bundle/
+├── msi/          # Установщик Windows (.msi)
+└── nsis/         # Установщик NSIS (.exe)
+```
+
+> Первая сборка компилирует весь Rust-код с нуля и занимает **10–20 минут**. Повторные сборки — значительно быстрее благодаря кэшу Cargo.
+
+### Оптимизация размера бандла
+
+В `Cargo.toml` уже настроен release-профиль для минимального размера:
+```toml
+[profile.release]
+opt-level = "s"   # оптимизация по размеру
+lto = true        # link-time optimization
+codegen-units = 1 # лучшее сжатие
+panic = "abort"   # убрать unwinding
+```
+
+---
+
+## Горячие клавиши
+
+### Холст и навигация
+
+| Клавиша | Действие |
+|---|---|
+| `Space` + ЛКМ / Средняя кнопка | Панорамирование |
+| Колёсико мыши | Зум |
+| `Ctrl+A` | Выбрать все объекты |
+
+### Создание карточек
+
+| Клавиша | Действие |
+|---|---|
+| `A` | Открыть меню выбора типа карточки у курсора |
+| `T` | Создать текстовую карточку у курсора |
+| `L` | Создать карточку-список у курсора |
+| `I` | Создать карточку-изображение у курсора |
+| `Ctrl+V` (с картинкой в буфере) | Вставить изображение как новую карточку |
+
+### Работа с объектами
+
+| Клавиша | Действие |
+|---|---|
+| `Delete` | Удалить выделенные объекты |
+| `Ctrl+D` / `Shift+D` | Дублировать выделенные объекты |
+| `Ctrl+C` | Копировать |
+| `Ctrl+X` | Вырезать |
+| `Ctrl+V` | Вставить |
+
+### Файл
+
+| Клавиша | Действие |
+|---|---|
+| `Ctrl+N` | Новый проект |
+| `Ctrl+O` | Открыть проект |
+| `Ctrl+S` | Сохранить |
+| `Ctrl+Shift+S` | Сохранить как |
+
+### Редактирование карточек
+
+| Клавиша | Действие |
+|---|---|
+| Клик по карточке | Открыть редактирование текста |
+| Клик по заголовку | Открыть редактирование заголовка |
+| `Enter` (в заголовке) | Завершить редактирование заголовка |
+| `Shift+Enter` (в тексте) | Новая строка |
+| `Escape` | Завершить редактирование |
+| `Shift` + ресайз изображения | Непропорциональное изменение размера |
+
+---
+
+## Формат файла проекта
+
+Проект сохраняется в файл `.board` — обычный JSON следующей структуры:
+
+```json
+{
+  "version": 1,
+  "camera": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "objects": [
+    {
+      "id": "uuid",
+      "type": "text",
+      "x": 100,
+      "y": 100,
+      "width": 220,
+      "height": 200,
+      "color": "orange",
+      "title": "Заголовок",
+      "content": "Текст карточки"
+    },
+    {
+      "id": "uuid",
+      "type": "tasks",
+      "x": 400,
+      "y": 100,
+      "width": 220,
+      "height": 260,
+      "color": "orange",
+      "tasks": [
+        { "id": "uuid", "text": "Задача", "done": false }
+      ],
+      "checkboxMode": true,
+      "tasksLocked": false
+    },
+    {
+      "id": "uuid",
+      "type": "image",
+      "x": 700,
+      "y": 100,
+      "width": 320,
+      "height": 240,
+      "color": "",
+      "imageSrc": "data:image/png;base64,...",
+      "caption": "Подпись к изображению"
+    }
+  ]
+}
+```
+
+Изображения хранятся как **base64 data URL** прямо внутри файла — никаких внешних зависимостей или папок с ассетами. Это упрощает портабельность но увеличивает размер файла при большом количестве изображений.
+
+---
+
+## Архитектурные решения
+
+### Редактирование текста поверх Konva
+
+Нативный ввод текста в `<canvas>` невозможен. Решение: при клике на карточку рассчитываются мировые координаты текстового поля, переводятся в экранные с учётом камеры (zoom + pan), и поверх canvas рендерится прозрачный `<textarea>` через `position: fixed`. Konva-текст скрывается на время редактирования, создавая иллюзию редактирования прямо в карточке.
+
+Хук `useTextEditor` управляет состоянием редактора и пересчитывает позицию `textarea` при live-resize карточки.
+
+### Drag из любой точки карточки
+
+Konva по умолчанию привязывает drag только к тому Shape, на котором он задан. Чтобы перетаскивание работало из любой точки карточки (включая текстовые поля и кнопки), дочерние элементы отслеживают `onMouseMove` и при превышении порога 4px вызывают `shapeRef.current.startDrag(e)` на фоновом `Rect`. Это стандартный паттерн для сложных Konva-объектов.
+
+### HTML-оверлей для списка задач
+
+Интерактивные элементы карточки-списка (чекбоксы, инпуты, кнопки удаления) реализованы как HTML через `<Html>` из `react-konva-utils`. Это избавляет от необходимости реализовывать интерактивность средствами Konva и позволяет использовать нативные браузерные элементы формы.
+
+### Z-order без отдельного поля
+
+Порядок рендеринга в Konva определяется порядком элементов в массиве (последний — поверх). При выборе карточки она перемещается в конец массива `objects` через `setObjects`. Это проще и надёжнее чем хранить отдельное поле `zIndex`.
+
+### Tauri-команды
+
+Rust-бэкенд содержит только две команды: `read_project_file` и `write_project_file`. Вся бизнес-логика — на стороне TypeScript. Это намеренно минималистичный подход: Rust используется только для того что недоступно из веба (нативные диалоги, прямой доступ к файловой системе).
